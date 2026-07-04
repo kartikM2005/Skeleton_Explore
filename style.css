@@ -783,13 +783,18 @@ header p {
   box-shadow: 0 0 15px rgba(255, 23, 68, 0.3) !important;
   border-radius: 6px !important;
   padding: 12px 24px !important;
-  display: flex !important;
+  display: none;          /* hidden by default; JS adds .ar-exit-visible to show */
   align-items: center !important;
   justify-content: center !important;
   gap: 8px !important;
   z-index: 1100 !important;
   cursor: pointer !important;
   transition: all 0.3s ease !important;
+}
+
+/* Added by showWebcamARExitButton(), removed by hideWebcamARExitButton() */
+#webcam-ar-exit.ar-exit-visible {
+  display: flex !important;
 }
 
 #webcam-ar-exit:hover {

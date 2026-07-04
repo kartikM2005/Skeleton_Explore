@@ -1282,13 +1282,13 @@ function showWebcamARExitButton() {
     document.body.appendChild(exitBtn);
     exitBtn.addEventListener('click', stopWebcamAR);
   }
-  exitBtn.style.display = 'flex';
+  exitBtn.classList.add('ar-exit-visible');
 }
 
 function hideWebcamARExitButton() {
   const exitBtn = document.getElementById('webcam-ar-exit');
   if (exitBtn) {
-    exitBtn.style.display = 'none';
+    exitBtn.classList.remove('ar-exit-visible');
   }
 }
 
