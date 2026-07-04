@@ -904,23 +904,18 @@ function getClosestBoneAtLocalPoint(localPoint) {
 function getClosestBoneVR(worldHitPoint) {
   if (!skeletonMesh) return null;
 
-  // ── Step 1: convert world → Three.js local space of skeletonGroup ───────
-  // skeletonGroup has scale=(0.11,0.11,0.11), position=(0,y,z), rotation=(0,0,0)
-  const groupPos   = skeletonGroup.position;
-  const groupScale = skeletonGroup.scale;
+  // ── Step 1: Convert world coordinate to local space of skeletonMesh ───────
+  // Three.js worldToLocal automatically handles all scale, translation, and rotation
+  // hierarchies of the skeletonGroup and parent GLTF nodes!
+  const localPoint = worldHitPoint.clone();
+  skeletonMesh.worldToLocal(localPoint);
 
-  // Un-translate and un-scale (rotation is always 0 in VR mode)
-  const lx = (worldHitPoint.x - groupPos.x) / groupScale.x;  // model X  = width
-  const ly = (worldHitPoint.y - groupPos.y) / groupScale.y;  // Three.js Y = model Z (height)
-  const lz = (worldHitPoint.z - groupPos.z) / groupScale.z;  // Three.js Z = model Y (depth)
-
-  // ── Step 2: remap to model's Z-up space ──────────────────────────────────
-  //   bounds.xMin/xMax  → model X  → Three.js local lx  (unchanged)
-  //   bounds.yMin/yMax  → model Y  → Three.js local lz  (depth, was Z)
-  //   bounds.zMin/zMax  → model Z  → Three.js local ly  (height, was Y)
-  const modelX = lx;
-  const modelY = lz;  // depth axis: Three.js Z ↔ model Y
-  const modelZ = ly;  // height axis: Three.js Y ↔ model Z
+  // ── Step 2: Remap to model's Z-up bounds space ───────────────────────────
+  //   In Three.js local space: X is width, Y is height, Z is depth.
+  //   In BONES_DATA bounds:    X is width, Y is depth,  Z is height.
+  const modelX = localPoint.x;
+  const modelY = localPoint.z; // Three.js Z (depth) -> model Y (depth)
+  const modelZ = localPoint.y; // Three.js Y (height) -> model Z (height)
 
   let candidate = null;
   let minDistance = Infinity;
