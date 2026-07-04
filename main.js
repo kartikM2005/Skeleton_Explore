@@ -45,6 +45,7 @@ let operatingRoomGroup = null; // 3D Operating Room model for VR mode
 let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
 let vrBonePreview = null; // Isolated bone geometry floating inside VR world
 let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
+let vrCycleIndex = -1;    // Tracker for trigger-based bone cycling in VR mode
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -512,6 +513,7 @@ function deselectAll() {
   }
   
   currentSelectedBone = null;
+  vrCycleIndex = -1; // Reset cycling tracker
   if (infoContent) infoContent.style.display = 'none';
   if (infoPlaceholder) infoPlaceholder.style.display = 'block';
 
@@ -1312,78 +1314,20 @@ const xrRaycaster = new THREE.Raycaster();
 const tempMatrix = new THREE.Matrix4();
 
 function updateXRControllerRaycast() {
-  let hoveredBoneKey = null;
-  
-  [controller1, controller2].forEach((controller) => {
-    if (!controller || !controller.visible) return;
-    
-    // Update raycaster position and orientation from controller matrixWorld
-    tempMatrix.identity().extractRotation(controller.matrixWorld);
-    xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-    xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-    
-    if (skeletonMesh) {
-      const intersects = xrRaycaster.intersectObject(skeletonMesh);
-      if (intersects.length > 0) {
-        // Use the VR-specific lookup that accounts for Z-as-height model axis
-        const boneKey = getClosestBoneVR(intersects[0].point);
-        if (boneKey) {
-          hoveredBoneKey = boneKey;
-        }
-      }
-    }
-  });
-
-  // Update hover states
-  if (hoveredBoneKey !== currentHoveredBone) {
-    if (currentHoveredBone) {
-      const pin = document.getElementById(`pin-${currentHoveredBone}`);
-      if (pin) pin.classList.remove('hovered');
-    }
-    
-    currentHoveredBone = hoveredBoneKey;
-    
-    if (currentHoveredBone) {
-      const pin = document.getElementById(`pin-${currentHoveredBone}`);
-      if (pin) pin.classList.add('hovered');
-    }
-  }
+  // Disabled hover raycasting in VR mode to keep the cycling experience focused and clean
+  return;
 }
 
 function onControllerSelect(controller) {
   if (!mainRenderer.xr.isPresenting) return;
   
-  tempMatrix.identity().extractRotation(controller.matrixWorld);
-  xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-  xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-  let clickedSomething = false;
-
-  // Check CLOSE button on VR panel first
-  if (vrCloseButton && vrInfoPanel && vrInfoPanel.visible) {
-    const closeHits = xrRaycaster.intersectObject(vrCloseButton);
-    if (closeHits.length > 0) {
-      deselectAll();
-      return;
-    }
-  }
-
-  // Check skeleton bones
-  if (skeletonMesh) {
-    const intersects = xrRaycaster.intersectObject(skeletonMesh);
-    if (intersects.length > 0) {
-      const boneKey = getClosestBoneVR(intersects[0].point);
-      if (boneKey) {
-        selectBone(boneKey);
-        clickedSomething = true;
-      }
-    }
-  }
-
-  // If the VR info panel is open and the user clicks empty space, dismiss it
-  if (currentSelectedBone && !clickedSomething) {
-    deselectAll();
-  }
+  // Squeezing/clicking any controller trigger cycles through the bones in order (Skull -> Spine -> Pelvis -> etc.)
+  // This requires zero aiming or wobbly raycasting!
+  const boneKeys = Object.keys(BONES_DATA);
+  vrCycleIndex = (vrCycleIndex + 1) % boneKeys.length;
+  
+  const targetBoneKey = boneKeys[vrCycleIndex];
+  selectBone(targetBoneKey);
 }
 
 // 11. Load the 3D Operating Room Model
