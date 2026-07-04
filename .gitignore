@@ -1,0 +1,13 @@
+# Ignore local SSL credentials
+*.pem
+key.pem
+cert.pem
+
+# Ignore logs
+*.log
+
+# Ignore local system/IDE directories
+.DS_Store
+Thumbs.db
+.gemini/
+.agents/
