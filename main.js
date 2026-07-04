@@ -501,6 +501,9 @@ function selectBone(key) {
   if (mainRenderer.xr.isPresenting) {
     showVRInfoPanel(bone, key);
   }
+
+  // Voice narration explanation for 2D and VR accessibility
+  speakBoneDetails(bone);
 }
 
 // Deselects active selections
@@ -517,6 +520,11 @@ function deselectAll() {
   vrCycleIndex = -1; // Reset cycling tracker
   if (infoContent) infoContent.style.display = 'none';
   if (infoPlaceholder) infoPlaceholder.style.display = 'block';
+
+  // Stop any active voice narration immediately
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
 
   // Toggle active class on app-container
   const appContainer = document.getElementById('app-container');
@@ -1584,3 +1592,31 @@ function vrPanelWrapText(ctx, text, x, y, maxWidth, lineHeight) {
   }
   ctx.fillText(line, x, y);
 }
+
+// ─────────────────────────────────────────────────────────────
+// 13. Speech Synthesis Narration (Accessibility & Immersion)
+// ─────────────────────────────────────────────────────────────
+
+function speakBoneDetails(bone) {
+  if (!window.speechSynthesis) return;
+
+  // Cancel any ongoing narration immediately
+  window.speechSynthesis.cancel();
+
+  // Construct structured text to read out
+  const text = `${bone.name}. Pronounced: ${bone.pronunciation}. Part of the ${bone.system}. Physiological function: ${bone.function}. Clinical significance: ${bone.clinicalSignificance}.`;
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.0; // Reading speed (1.0 is normal)
+  utterance.pitch = 1.0; // Vocal pitch
+
+  // Set English voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'));
+  if (englishVoice) {
+    utterance.voice = englishVoice;
+  }
+
+  window.speechSynthesis.speak(utterance);
+}
+
