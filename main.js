@@ -967,8 +967,8 @@ async function startXRSession(mode) {
         operatingRoomGroup.visible = true;
       }
       
-      // Position the skeleton standing in front of the user (Y is adjusted to stand on the floor)
-      skeletonGroup.position.set(0, skeletonBottomOffset, -1.2);
+      // Position the skeleton standing in front and slightly to the right of the user
+      skeletonGroup.position.set(0.4, skeletonBottomOffset, -1.2);
       skeletonGroup.rotation.set(0, 0, 0);
     }
     
