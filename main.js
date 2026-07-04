@@ -1039,6 +1039,7 @@ function render() {
     labelsContainer.style.display = 'block';
   } else {
     labelsContainer.style.display = 'none';
+  }
 }
 
 // --- Webcam AR (Mobile Pass-Through AR without installations) ---
