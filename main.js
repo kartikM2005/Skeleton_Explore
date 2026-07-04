@@ -1347,7 +1347,7 @@ function loadOperatingRoomModel() {
     },
     undefined,
     (error) => {
-      console.error(\"Error loading operating room model:\", error);
+      console.error('Error loading operating room model:', error);
     }
   );
 }
