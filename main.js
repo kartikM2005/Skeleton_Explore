@@ -539,6 +539,7 @@ function deselectAll() {
 
   // Hide VR holographic panel
   hideVRInfoPanel();
+}
 
 // Smooth tween target position helper
 function tweenTargetTo(targetPos) {
