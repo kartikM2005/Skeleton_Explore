@@ -873,6 +873,60 @@ function getClosestBoneAtLocalPoint(localPoint) {
   return candidate;
 }
 
+/**
+ * VR-specific bone lookup.
+ * The GLB model was authored with Z as the vertical/height axis and Y as depth.
+ * After Three.js worldToLocal the height maps to Y, but the BONES_DATA bounds
+ * are stored in the original Z-up model space. This function converts the
+ * world-space hit point into the model's Z-up local coordinate frame before
+ * matching, giving accurate results from any controller angle.
+ */
+function getClosestBoneVR(worldHitPoint) {
+  if (!skeletonMesh) return null;
+
+  // ── Step 1: convert world → Three.js local space of skeletonGroup ───────
+  // skeletonGroup has scale=(0.11,0.11,0.11), position=(0,y,z), rotation=(0,0,0)
+  const groupPos   = skeletonGroup.position;
+  const groupScale = skeletonGroup.scale;
+
+  // Un-translate and un-scale (rotation is always 0 in VR mode)
+  const lx = (worldHitPoint.x - groupPos.x) / groupScale.x;  // model X  = width
+  const ly = (worldHitPoint.y - groupPos.y) / groupScale.y;  // Three.js Y = model Z (height)
+  const lz = (worldHitPoint.z - groupPos.z) / groupScale.z;  // Three.js Z = model Y (depth)
+
+  // ── Step 2: remap to model's Z-up space ──────────────────────────────────
+  //   bounds.xMin/xMax  → model X  → Three.js local lx  (unchanged)
+  //   bounds.yMin/yMax  → model Y  → Three.js local lz  (depth, was Z)
+  //   bounds.zMin/zMax  → model Z  → Three.js local ly  (height, was Y)
+  const modelX = lx;
+  const modelY = lz;  // depth axis: Three.js Z ↔ model Y
+  const modelZ = ly;  // height axis: Three.js Y ↔ model Z
+
+  let candidate = null;
+  let minDistance = Infinity;
+
+  Object.entries(BONES_DATA).forEach(([key, bone]) => {
+    const b = bone.bounds;
+    if (
+      modelX >= b.xMin && modelX <= b.xMax &&
+      modelY >= b.yMin && modelY <= b.yMax &&
+      modelZ >= b.zMin && modelZ <= b.zMax
+    ) {
+      // Distance to marker centre (also in model Z-up space)
+      const dx = modelX - bone.marker.x;
+      const dy = modelY - bone.marker.y;
+      const dz = modelZ - bone.marker.z;
+      const dist = dx*dx + dy*dy + dz*dz;
+      if (dist < minDistance) {
+        minDistance = dist;
+        candidate = key;
+      }
+    }
+  });
+
+  return candidate;
+}
+
 // 9. WebXR Implementation (AR/VR sessions)
 async function startXRSession(mode) {
   if (xrSession) {
@@ -1281,9 +1335,8 @@ function updateXRControllerRaycast() {
     if (skeletonMesh) {
       const intersects = xrRaycaster.intersectObject(skeletonMesh);
       if (intersects.length > 0) {
-        const localPoint = intersects[0].point.clone();
-        skeletonMesh.worldToLocal(localPoint);
-        const boneKey = getClosestBoneAtLocalPoint(localPoint);
+        // Use the VR-specific lookup that accounts for Z-as-height model axis
+        const boneKey = getClosestBoneVR(intersects[0].point);
         if (boneKey) {
           hoveredBoneKey = boneKey;
         }
@@ -1327,9 +1380,8 @@ function onControllerSelect(controller) {
   if (skeletonMesh) {
     const intersects = xrRaycaster.intersectObject(skeletonMesh);
     if (intersects.length > 0) {
-      const localPoint = intersects[0].point.clone();
-      skeletonMesh.worldToLocal(localPoint);
-      const boneKey = getClosestBoneAtLocalPoint(localPoint);
+      // Use the VR-specific lookup that accounts for Z-as-height model axis
+      const boneKey = getClosestBoneVR(intersects[0].point);
       if (boneKey) {
         selectBone(boneKey);
       }
