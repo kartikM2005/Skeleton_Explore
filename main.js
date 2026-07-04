@@ -46,6 +46,7 @@ let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
 let vrBonePreview = null; // Isolated bone geometry floating inside VR world
 let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
 let vrCycleIndex = -1;    // Tracker for trigger-based bone cycling in VR mode
+let lastTriggerTime = 0;   // Timestamp to track double-trigger / double-clicks in VR
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -1320,6 +1321,18 @@ function updateXRControllerRaycast() {
 
 function onControllerSelect(controller) {
   if (!mainRenderer.xr.isPresenting) return;
+  
+  const currentTime = new Date().getTime();
+  const triggerLength = currentTime - lastTriggerTime;
+  
+  // Double-pull the trigger within 350ms to close/dismiss the panel
+  if (triggerLength < 350 && triggerLength > 0) {
+    deselectAll();
+    lastTriggerTime = 0; // reset
+    return;
+  }
+  
+  lastTriggerTime = currentTime;
   
   // Squeezing/clicking any controller trigger cycles through the bones in order (Skull -> Spine -> Pelvis -> etc.)
   // This requires zero aiming or wobbly raycasting!
