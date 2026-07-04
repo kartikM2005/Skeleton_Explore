@@ -292,9 +292,13 @@ function loadSkeletonModel() {
       }, 500);
     },
     (xhr) => {
-      if (xhr.total) {
+      if (xhr.total && xhr.total > 0) {
         const percent = Math.round((xhr.loaded / xhr.total) * 100);
         loadingText.innerText = `Loading Skeleton Model... ${percent}%`;
+      } else {
+        // Server didn't send Content-Length — show bytes received so it doesn't look frozen
+        const mb = (xhr.loaded / 1024 / 1024).toFixed(1);
+        loadingText.innerText = `Loading Skeleton Model... ${mb} MB received`;
       }
     },
     (error) => {
