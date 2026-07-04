@@ -903,43 +903,9 @@ function getClosestBoneAtLocalPoint(localPoint) {
  */
 function getClosestBoneVR(worldHitPoint) {
   if (!skeletonMesh) return null;
-
-  // ── Step 1: Convert world coordinate to local space of skeletonMesh ───────
-  // Three.js worldToLocal automatically handles all scale, translation, and rotation
-  // hierarchies of the skeletonGroup and parent GLTF nodes!
   const localPoint = worldHitPoint.clone();
   skeletonMesh.worldToLocal(localPoint);
-
-  // ── Step 2: Remap to model's Z-up bounds space ───────────────────────────
-  //   In Three.js local space: X is width, Y is height, Z is depth.
-  //   In BONES_DATA bounds:    X is width, Y is depth,  Z is height.
-  const modelX = localPoint.x;
-  const modelY = localPoint.z; // Three.js Z (depth) -> model Y (depth)
-  const modelZ = localPoint.y; // Three.js Y (height) -> model Z (height)
-
-  let candidate = null;
-  let minDistance = Infinity;
-
-  Object.entries(BONES_DATA).forEach(([key, bone]) => {
-    const b = bone.bounds;
-    if (
-      modelX >= b.xMin && modelX <= b.xMax &&
-      modelY >= b.yMin && modelY <= b.yMax &&
-      modelZ >= b.zMin && modelZ <= b.zMax
-    ) {
-      // Distance to marker centre (also in model Z-up space)
-      const dx = modelX - bone.marker.x;
-      const dy = modelY - bone.marker.y;
-      const dz = modelZ - bone.marker.z;
-      const dist = dx*dx + dy*dy + dz*dz;
-      if (dist < minDistance) {
-        minDistance = dist;
-        candidate = key;
-      }
-    }
-  });
-
-  return candidate;
+  return getClosestBoneAtLocalPoint(localPoint);
 }
 
 // 9. WebXR Implementation (AR/VR sessions)
