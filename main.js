@@ -756,6 +756,26 @@ function setupEventListeners() {
   xrClose.addEventListener('click', () => {
     if (xrSession) xrSession.end();
   });
+
+  // Double-tap anywhere on screen to dismiss/close the active bone info panel (mobile/cardboard)
+  let lastTap = 0;
+  window.addEventListener('touchstart', (e) => {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap;
+    if (tapLength < 300 && tapLength > 0) {
+      if (currentSelectedBone) {
+        deselectAll();
+      }
+    }
+    lastTap = currentTime;
+  });
+
+  // Double-click anywhere to dismiss/close the active bone info panel (desktop)
+  window.addEventListener('dblclick', () => {
+    if (currentSelectedBone) {
+      deselectAll();
+    }
+  });
 }
 
 // Triggered by ResizeObserver when container bounds change
@@ -1379,6 +1399,8 @@ function onControllerSelect(controller) {
   xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
   xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
+  let clickedSomething = false;
+
   // Check CLOSE button on VR panel first
   if (vrCloseButton && vrInfoPanel && vrInfoPanel.visible) {
     const closeHits = xrRaycaster.intersectObject(vrCloseButton);
@@ -1395,8 +1417,14 @@ function onControllerSelect(controller) {
       const boneKey = getClosestBoneVR(intersects[0].point);
       if (boneKey) {
         selectBone(boneKey);
+        clickedSomething = true;
       }
     }
+  }
+
+  // If the VR info panel is open and the user clicks empty space, dismiss it
+  if (currentSelectedBone && !clickedSomething) {
+    deselectAll();
   }
 }
 
