@@ -896,6 +896,9 @@ function getClosestBoneAtLocalPoint(localPoint) {
  */
 function getClosestBoneVR(worldHitPoint) {
   if (!skeletonMesh) return null;
+  // Ensure the mesh's world matrix has the fresh translation/rotation/scale updates
+  skeletonMesh.updateMatrixWorld(true);
+  
   const localPoint = worldHitPoint.clone();
   skeletonMesh.worldToLocal(localPoint);
   return getClosestBoneAtLocalPoint(localPoint);
@@ -949,6 +952,7 @@ async function startXRSession(mode) {
       // Position the skeleton standing in front and slightly to the right of the user
       skeletonGroup.position.set(0.4, skeletonBottomOffset, -1.2);
       skeletonGroup.rotation.set(0, 0, 0);
+      skeletonGroup.updateMatrixWorld(true);
     }
     
     showXRMessage(`Entered XR Session. Put on your device!`);
