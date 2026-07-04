@@ -872,21 +872,14 @@ function getClosestBoneAtLocalPoint(localPoint) {
   let minDistance = Infinity;
   
   Object.entries(BONES_DATA).forEach(([key, bone]) => {
-    const b = bone.bounds;
+    const dx = localPoint.x - bone.marker.x;
+    const dy = localPoint.y - bone.marker.y;
+    const dz = localPoint.z - bone.marker.z;
+    const dist = dx*dx + dy*dy + dz*dz;
     
-    if (localPoint.x >= b.xMin && localPoint.x <= b.xMax &&
-        localPoint.y >= b.yMin && localPoint.y <= b.yMax &&
-        localPoint.z >= b.zMin && localPoint.z <= b.zMax) {
-      
-      const dx = localPoint.x - bone.marker.x;
-      const dy = localPoint.y - bone.marker.y;
-      const dz = localPoint.z - bone.marker.z;
-      const dist = dx*dx + dy*dy + dz*dz;
-      
-      if (dist < minDistance) {
-        minDistance = dist;
-        candidate = key;
-      }
+    if (dist < minDistance) {
+      minDistance = dist;
+      candidate = key;
     }
   });
   
