@@ -959,6 +959,11 @@ async function startXRSession(mode) {
       mainRenderer.setClearAlpha(0);
       skeletonGroup.position.set(0, -1.0, -1.5);
     } else if (mode === 'immersive-vr') {
+      // Set solid background color to block pass-through camera in AR-based WebXR viewers (like Zapbox)
+      mainScene.userData.originalBackground = mainScene.background;
+      mainScene.background = new THREE.Color(0x070820);
+      mainRenderer.setClearAlpha(1.0);
+
       // Hide floor grid helpers for VR immersion
       if (gridHelper) gridHelper.visible = false;
       if (floorPlane) floorPlane.visible = false;
@@ -978,6 +983,13 @@ async function startXRSession(mode) {
       xrSession = null;
       hideXRMessage();
       mainRenderer.setClearAlpha(1);
+      
+      // Restore background
+      if (mainScene.userData.originalBackground !== undefined) {
+        mainScene.background = mainScene.userData.originalBackground;
+      } else {
+        mainScene.background = null;
+      }
       
       // Hide operating room and restore standard helpers
       if (operatingRoomGroup) operatingRoomGroup.visible = false;
