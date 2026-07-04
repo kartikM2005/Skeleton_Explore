@@ -42,6 +42,9 @@ let gridHelper = null;
 let floorPlane = null;
 let controller1 = null, controller2 = null; // 6DoF WebXR controllers (for Zapbox)
 let operatingRoomGroup = null; // 3D Operating Room model for VR mode
+let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
+let vrBonePreview = null; // Isolated bone geometry floating inside VR world
+let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -491,6 +494,11 @@ function selectBone(key) {
   
   // Slice geometry and show in Isolated Sub-Viewport (HTML panel for 2D)
   isolateBoneInSubViewport(bone, key);
+
+  // Show holographic in-world VR panel when presenting in Zapbox / WebXR
+  if (mainRenderer.xr.isPresenting) {
+    showVRInfoPanel(bone, key);
+  }
 }
 
 // Deselects active selections
@@ -529,6 +537,9 @@ function deselectAll() {
     const targetY = isMobile ? center.y + 0.3 : center.y;
     tweenTargetTo(new THREE.Vector3(0, targetY, 0));
   }
+
+  // Hide VR holographic panel
+  hideVRInfoPanel();
 }
 
 // Smooth tween target position helper
@@ -1040,6 +1051,19 @@ function render() {
   } else {
     labelsContainer.style.display = 'none';
   }
+
+  // Anchor VR info panel in front and to the right of the user's view every frame
+  if (mainRenderer.xr.isPresenting && vrInfoPanel && vrInfoPanel.visible) {
+    const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    const camRight   = new THREE.Vector3(1, 0, 0).applyQuaternion(mainCamera.quaternion);
+    const camUp      = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
+    vrInfoPanel.position
+      .copy(mainCamera.position)
+      .addScaledVector(camForward, 1.4)
+      .addScaledVector(camRight,   0.55)
+      .addScaledVector(camUp,     -0.05);
+    vrInfoPanel.quaternion.copy(mainCamera.quaternion);
+  }
 }
 
 // --- Webcam AR (Mobile Pass-Through AR without installations) ---
@@ -1343,11 +1367,19 @@ function onControllerSelect(controller) {
   xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
   xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-  // ── Check skeleton bones ─────────────────────────────────
+  // Check CLOSE button on VR panel first
+  if (vrCloseButton && vrInfoPanel && vrInfoPanel.visible) {
+    const closeHits = xrRaycaster.intersectObject(vrCloseButton);
+    if (closeHits.length > 0) {
+      deselectAll();
+      return;
+    }
+  }
+
+  // Check skeleton bones
   if (skeletonMesh) {
     const intersects = xrRaycaster.intersectObject(skeletonMesh);
     if (intersects.length > 0) {
-      // Use the VR-specific lookup that accounts for Z-as-height model axis
       const boneKey = getClosestBoneVR(intersects[0].point);
       if (boneKey) {
         selectBone(boneKey);
@@ -1385,4 +1417,215 @@ function loadOperatingRoomModel() {
       console.error('Error loading operating room model:', error);
     }
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 12. Holographic In-World VR Info Panel (Zapbox / WebXR)
+// ─────────────────────────────────────────────────────────────
+
+function showVRInfoPanel(bone, key) {
+  // Clean up previous panel
+  hideVRInfoPanel();
+
+  // Build canvas texture
+  var CW = 1024, CH = 768;
+  var canvas = document.createElement('canvas');
+  canvas.width  = CW;
+  canvas.height = CH;
+  var ctx = canvas.getContext('2d');
+
+  // Panel background
+  ctx.fillStyle = 'rgba(7, 8, 32, 0.94)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.fill();
+
+  // Neon border
+  ctx.strokeStyle = '#00f2fe';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#00f2fe';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Bone name
+  ctx.fillStyle = '#00f2fe';
+  ctx.font = 'bold 62px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(bone.name.toUpperCase(), CW / 2, 88);
+
+  // Pronunciation
+  ctx.fillStyle = '#f35588';
+  ctx.font = 'italic 32px Arial';
+  ctx.fillText('[ ' + bone.pronunciation + ' ]', CW / 2, 138);
+
+  // System
+  ctx.fillStyle = '#4facfe';
+  ctx.font = '28px Arial';
+  ctx.fillText(bone.system, CW / 2, 182);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(0,242,254,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(56, 200);
+  ctx.lineTo(CW - 56, 200);
+  ctx.stroke();
+
+  var PAD = 60, W = CW - PAD * 2;
+
+  // Function section
+  ctx.fillStyle = '#a0aec0';
+  ctx.font = 'bold 26px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('PHYSIOLOGICAL FUNCTION', PAD, 242);
+  ctx.fillStyle = '#f0f3f9';
+  ctx.font = '22px Arial';
+  vrPanelWrapText(ctx, bone.function, PAD, 274, W, 28);
+
+  // Clinical significance
+  ctx.fillStyle = '#a0aec0';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText('CLINICAL SIGNIFICANCE', PAD, 430);
+  ctx.fillStyle = '#f0f3f9';
+  ctx.font = '22px Arial';
+  vrPanelWrapText(ctx, bone.clinicalSignificance, PAD, 462, W, 28);
+
+  // Fun fact
+  ctx.fillStyle = '#f35588';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText('FUN FACT', PAD, 610);
+  ctx.fillStyle = '#f7b2c7';
+  ctx.font = '22px Arial';
+  vrPanelWrapText(ctx, bone.funFact, PAD, 642, W, 28);
+
+  // Footer hint
+  ctx.fillStyle = 'rgba(160,174,192,0.5)';
+  ctx.font = '20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Aim at X CLOSE and pull trigger to dismiss', CW / 2, CH - 20);
+
+  var texture = new THREE.CanvasTexture(canvas);
+
+  // Build 3D panel mesh
+  var panelGeom = new THREE.PlaneGeometry(1.3, 0.975);
+  var panelMat  = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  var panelMesh = new THREE.Mesh(panelGeom, panelMat);
+  panelMesh.renderOrder = 999;
+
+  // Build isolated bone preview (left of info card)
+  var bonePreviewMesh = null;
+  if (skeletonMesh) {
+    var slicedGeom = sliceGeometry(skeletonMesh, bone.bounds);
+    slicedGeom.computeBoundingBox();
+    slicedGeom.center();
+    var previewMat = new THREE.MeshStandardMaterial({
+      color: 0x00f2fe,
+      roughness: 0.4,
+      metalness: 0.1,
+      emissive: new THREE.Color(0x004466)
+    });
+    bonePreviewMesh = new THREE.Mesh(slicedGeom, previewMat);
+    bonePreviewMesh.rotation.x = -Math.PI / 2;
+    var previewBox  = new THREE.Box3().setFromObject(bonePreviewMesh);
+    var previewSize = previewBox.getSize(new THREE.Vector3());
+    var maxDim = Math.max(previewSize.x, previewSize.y, previewSize.z);
+    var previewScale = 0.38 / (maxDim || 1);
+    bonePreviewMesh.scale.setScalar(previewScale);
+    bonePreviewMesh.position.set(-0.9, 0, 0.02);
+  }
+
+  // Build CLOSE button
+  var btnCanvas = document.createElement('canvas');
+  btnCanvas.width  = 256;
+  btnCanvas.height = 96;
+  var bCtx = btnCanvas.getContext('2d');
+  bCtx.fillStyle = 'rgba(220, 38, 38, 0.92)';
+  bCtx.beginPath();
+  bCtx.roundRect(4, 4, 248, 88, 20);
+  bCtx.fill();
+  bCtx.strokeStyle = '#ff6b6b';
+  bCtx.lineWidth = 3;
+  bCtx.shadowColor = '#ff6b6b';
+  bCtx.shadowBlur = 12;
+  bCtx.beginPath();
+  bCtx.roundRect(4, 4, 248, 88, 20);
+  bCtx.stroke();
+  bCtx.shadowBlur = 0;
+  bCtx.fillStyle = '#ffffff';
+  bCtx.font = 'bold 38px Arial';
+  bCtx.textAlign = 'center';
+  bCtx.textBaseline = 'middle';
+  bCtx.fillText('X  CLOSE', 128, 48);
+  var btnTexture = new THREE.CanvasTexture(btnCanvas);
+  var btnGeom = new THREE.PlaneGeometry(0.32, 0.12);
+  var btnMat  = new THREE.MeshBasicMaterial({
+    map: btnTexture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  vrCloseButton = new THREE.Mesh(btnGeom, btnMat);
+  vrCloseButton.renderOrder = 1000;
+  vrCloseButton.name = 'vrCloseButton';
+  vrCloseButton.position.set(0.52, 0.47, 0.01);
+
+  // Assemble group
+  vrInfoPanel = new THREE.Group();
+  vrInfoPanel.add(panelMesh);
+  if (bonePreviewMesh) {
+    vrBonePreview = bonePreviewMesh;
+    vrInfoPanel.add(vrBonePreview);
+  }
+  vrInfoPanel.add(vrCloseButton);
+  vrInfoPanel.visible = true;
+  mainScene.add(vrInfoPanel);
+}
+
+function hideVRInfoPanel() {
+  if (vrInfoPanel) {
+    vrInfoPanel.traverse(function(child) {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      }
+    });
+    mainScene.remove(vrInfoPanel);
+    vrInfoPanel = null;
+  }
+  if (vrBonePreview) {
+    mainScene.remove(vrBonePreview);
+    vrBonePreview = null;
+  }
+  vrCloseButton = null;
+}
+
+function vrPanelWrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  var words = text.split(' ');
+  var line = '';
+  for (var i = 0; i < words.length; i++) {
+    var testLine = line + words[i] + ' ';
+    var metrics  = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && i > 0) {
+      ctx.fillText(line, x, y);
+      line = words[i] + ' ';
+      y += lineHeight;
+      if (y > 740) break;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
 }
