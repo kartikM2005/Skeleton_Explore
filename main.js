@@ -44,6 +44,7 @@ let controller1 = null, controller2 = null; // 6DoF WebXR controllers (for Zapbo
 let operatingRoomGroup = null; // 3D Operating Room model for VR mode
 let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
 let vrBonePreview = null; // Isolated bone geometry floating inside VR world
+let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -1312,7 +1313,17 @@ function onControllerSelect(controller) {
   tempMatrix.identity().extractRotation(controller.matrixWorld);
   xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
   xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-  
+
+  // ── Check CLOSE button first ────────────────────────────
+  if (vrCloseButton && vrInfoPanel && vrInfoPanel.visible) {
+    const closeHits = xrRaycaster.intersectObject(vrCloseButton);
+    if (closeHits.length > 0) {
+      deselectAll(); // hides panel + resets skeleton selection
+      return;
+    }
+  }
+
+  // ── Check skeleton bones ─────────────────────────────────
   if (skeletonMesh) {
     const intersects = xrRaycaster.intersectObject(skeletonMesh);
     if (intersects.length > 0) {
@@ -1517,7 +1528,52 @@ function updateVRInfoPanel(bone, key) {
     vrInfoPanel.add(vrBonePreview);
   }
 
-  // Position will be updated every frame in render(); start hidden
+  // ── Build CLOSE button (top-right corner of panel) ───────
+  const btnCanvas = document.createElement('canvas');
+  btnCanvas.width  = 256;
+  btnCanvas.height = 96;
+  const bCtx = btnCanvas.getContext('2d');
+
+  // Button background
+  bCtx.fillStyle = 'rgba(220, 38, 38, 0.92)';
+  bCtx.beginPath();
+  bCtx.roundRect(4, 4, 248, 88, 20);
+  bCtx.fill();
+
+  // Neon red border
+  bCtx.strokeStyle = '#ff6b6b';
+  bCtx.lineWidth = 3;
+  bCtx.shadowColor = '#ff6b6b';
+  bCtx.shadowBlur = 12;
+  bCtx.beginPath();
+  bCtx.roundRect(4, 4, 248, 88, 20);
+  bCtx.stroke();
+  bCtx.shadowBlur = 0;
+
+  // ✕ CLOSE label
+  bCtx.fillStyle = '#ffffff';
+  bCtx.font = 'bold 38px Arial';
+  bCtx.textAlign = 'center';
+  bCtx.textBaseline = 'middle';
+  bCtx.fillText('✕  CLOSE', 128, 48);
+
+  const btnTexture = new THREE.CanvasTexture(btnCanvas);
+  const btnGeom = new THREE.PlaneGeometry(0.32, 0.12);
+  const btnMat  = new THREE.MeshBasicMaterial({
+    map: btnTexture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+  });
+  vrCloseButton = new THREE.Mesh(btnGeom, btnMat);
+  vrCloseButton.renderOrder = 1000;
+  vrCloseButton.name = 'vrCloseButton';
+  // Position: top-right corner of the 1.3 × 0.975 info panel
+  vrCloseButton.position.set(0.52, 0.47, 0.01);
+  vrInfoPanel.add(vrCloseButton);
+
+  // Position will be updated every frame in render(); start visible
   vrInfoPanel.visible = true;
   mainScene.add(vrInfoPanel);
 }
@@ -1541,6 +1597,7 @@ function hideVRInfoPanel() {
     mainScene.remove(vrBonePreview);
     vrBonePreview = null;
   }
+  vrCloseButton = null; // Already disposed via vrInfoPanel.traverse above
 }
 
 /** Word-wrap helper for canvas 2D context. */
