@@ -42,6 +42,8 @@ let gridHelper = null;
 let floorPlane = null;
 let controller1 = null, controller2 = null; // 6DoF WebXR controllers (for Zapbox)
 let operatingRoomGroup = null; // 3D Operating Room model for VR mode
+let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
+let vrBonePreview = null; // Isolated bone geometry floating inside VR world
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -485,8 +487,13 @@ function selectBone(key) {
   // Focus Main Camera on the selected bone
   focusCameraOnBone(bone);
   
-  // Slice geometry and show in Isolated Sub-Viewport
+  // Slice geometry and show in Isolated Sub-Viewport (HTML panel for 2D)
   isolateBoneInSubViewport(bone, key);
+
+  // Show holographic in-world VR panel when presenting in Zapbox / WebXR
+  if (mainRenderer.xr.isPresenting) {
+    updateVRInfoPanel(bone, key);
+  }
 }
 
 // Deselects active selections
@@ -522,10 +529,12 @@ function deselectAll() {
     const finalBox = new THREE.Box3().setFromObject(skeletonGroup);
     const center = finalBox.getCenter(new THREE.Vector3());
     const isMobile = window.innerWidth <= 768;
-    const targetY = isMobile ? center.y + 0.3 : center.y; // Match the raised target Y on mobile to prevent pushing skeleton up
+    const targetY = isMobile ? center.y + 0.3 : center.y;
     tweenTargetTo(new THREE.Vector3(0, targetY, 0));
   }
-}
+
+  // Hide VR holographic panel
+  hideVRInfoPanel();
 
 // Smooth tween target position helper
 function tweenTargetTo(targetPos) {
@@ -982,6 +991,19 @@ function render() {
   } else {
     labelsContainer.style.display = 'none';
   }
+
+  // Anchor VR info panel in front and to the right of the user's view every frame
+  if (mainRenderer.xr.isPresenting && vrInfoPanel && vrInfoPanel.visible) {
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    const right   = new THREE.Vector3(1, 0, 0).applyQuaternion(mainCamera.quaternion);
+    const up      = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
+    vrInfoPanel.position
+      .copy(mainCamera.position)
+      .addScaledVector(forward, 1.4)   // 1.4 m in front
+      .addScaledVector(right,   0.55)  // 0.55 m to the right
+      .addScaledVector(up,     -0.05); // very slightly below eye level
+    vrInfoPanel.quaternion.copy(mainCamera.quaternion);
+  }
 }
 
 // --- Webcam AR (Mobile Pass-Through AR without installations) ---
@@ -1325,7 +1347,212 @@ function loadOperatingRoomModel() {
     },
     undefined,
     (error) => {
-      console.error("Error loading operating room model:", error);
+      console.error(\"Error loading operating room model:\", error);
     }
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 12. Holographic In-World VR Info Panel (Zapbox / WebXR)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Draws bone information onto an offscreen canvas and applies it as a texture
+ * to a floating 3D plane inside the main WebXR scene.  Also adds a secondary
+ * plane showing the sliced bone geometry preview to the left of the info card.
+ */
+function updateVRInfoPanel(bone, key) {
+  // ── Clean up previous panel ──────────────────────────────
+  if (vrInfoPanel) {
+    vrInfoPanel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      }
+    });
+    while (vrInfoPanel.children.length) vrInfoPanel.remove(vrInfoPanel.children[0]);
+    mainScene.remove(vrInfoPanel);
+  }
+
+  if (vrBonePreview) {
+    if (vrBonePreview.geometry) vrBonePreview.geometry.dispose();
+    if (vrBonePreview.material) vrBonePreview.material.dispose();
+    mainScene.remove(vrBonePreview);
+    vrBonePreview = null;
+  }
+
+  // ── Build canvas texture ─────────────────────────────────
+  const CW = 1024, CH = 768;
+  const canvas = document.createElement('canvas');
+  canvas.width  = CW;
+  canvas.height = CH;
+  const ctx = canvas.getContext('2d');
+
+  // Panel background
+  ctx.fillStyle = 'rgba(7, 8, 32, 0.94)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.fill();
+
+  // Neon border
+  ctx.strokeStyle = '#00f2fe';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#00f2fe';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Bone name
+  ctx.fillStyle = '#00f2fe';
+  ctx.font = 'bold 62px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(bone.name.toUpperCase(), CW / 2, 88);
+
+  // Pronunciation badge
+  ctx.fillStyle = '#f35588';
+  ctx.font = 'italic 32px Arial';
+  ctx.fillText(`[ ${bone.pronunciation} ]`, CW / 2, 138);
+
+  // System badge
+  ctx.fillStyle = '#4facfe';
+  ctx.font = '28px Arial';
+  ctx.fillText(bone.system, CW / 2, 182);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(0,242,254,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(56, 200); ctx.lineTo(CW - 56, 200);
+  ctx.stroke();
+
+  const PAD = 60, W = CW - PAD * 2;
+
+  // Function section
+  ctx.fillStyle = '#a0aec0';
+  ctx.font = 'bold 26px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('PHYSIOLOGICAL FUNCTION', PAD, 242);
+  ctx.fillStyle = '#f0f3f9';
+  ctx.font = '22px Arial';
+  vrWrapText(ctx, bone.function, PAD, 274, W, 28);
+
+  // Clinical significance
+  ctx.fillStyle = '#a0aec0';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText('CLINICAL SIGNIFICANCE', PAD, 430);
+  ctx.fillStyle = '#f0f3f9';
+  ctx.font = '22px Arial';
+  vrWrapText(ctx, bone.clinicalSignificance, PAD, 462, W, 28);
+
+  // Fun fact
+  ctx.fillStyle = '#f35588';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText('FUN FACT', PAD, 610);
+  ctx.fillStyle = '#f7b2c7';
+  ctx.font = '22px Arial';
+  vrWrapText(ctx, bone.funFact, PAD, 642, W, 28);
+
+  // Footer hint
+  ctx.fillStyle = 'rgba(160,174,192,0.5)';
+  ctx.font = '20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Squeeze controller grip to dismiss', CW / 2, CH - 20);
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  // ── Build 3D panel mesh (1.3 m wide × 0.97 m tall) ──────
+  const panelGeom = new THREE.PlaneGeometry(1.3, 0.975);
+  const panelMat  = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const panelMesh = new THREE.Mesh(panelGeom, panelMat);
+  panelMesh.renderOrder = 999;
+
+  // ── Build isolated bone preview (left of info card) ─────
+  let bonePreviewMesh = null;
+  if (skeletonMesh) {
+    const slicedGeom = sliceGeometry(skeletonMesh, bone.bounds);
+    slicedGeom.computeBoundingBox();
+    slicedGeom.center();
+
+    const previewMat = new THREE.MeshStandardMaterial({
+      color: 0x00f2fe,
+      roughness: 0.4,
+      metalness: 0.1,
+      emissive: new THREE.Color(0x004466),
+    });
+
+    bonePreviewMesh = new THREE.Mesh(slicedGeom, previewMat);
+    // Rotate so it is upright inside the 3D panel group
+    bonePreviewMesh.rotation.x = -Math.PI / 2;
+
+    // Scale to fit a ~0.4 m cube
+    const previewBox  = new THREE.Box3().setFromObject(bonePreviewMesh);
+    const previewSize = previewBox.getSize(new THREE.Vector3());
+    const maxDim = Math.max(previewSize.x, previewSize.y, previewSize.z);
+    const previewScale = 0.38 / (maxDim || 1);
+    bonePreviewMesh.scale.setScalar(previewScale);
+    bonePreviewMesh.position.set(-0.9, 0, 0.02); // to the left of the panel
+  }
+
+  // ── Assemble group ───────────────────────────────────────
+  vrInfoPanel = new THREE.Group();
+  vrInfoPanel.add(panelMesh);
+  if (bonePreviewMesh) {
+    vrBonePreview = bonePreviewMesh;
+    vrInfoPanel.add(vrBonePreview);
+  }
+
+  // Position will be updated every frame in render(); start hidden
+  vrInfoPanel.visible = true;
+  mainScene.add(vrInfoPanel);
+}
+
+/** Hides and disposes the VR holographic panel. */
+function hideVRInfoPanel() {
+  if (vrInfoPanel) {
+    vrInfoPanel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      }
+    });
+    mainScene.remove(vrInfoPanel);
+    vrInfoPanel = null;
+  }
+  if (vrBonePreview) {
+    mainScene.remove(vrBonePreview);
+    vrBonePreview = null;
+  }
+}
+
+/** Word-wrap helper for canvas 2D context. */
+function vrWrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '';
+  for (let i = 0; i < words.length; i++) {
+    const testLine    = line + words[i] + ' ';
+    const { width }  = ctx.measureText(testLine);
+    if (width > maxWidth && i > 0) {
+      ctx.fillText(line, x, y);
+      line = words[i] + ' ';
+      y   += lineHeight;
+      if (y > 740) break; // guard against overflowing the canvas
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
 }
