@@ -74,13 +74,20 @@ const mouse = new THREE.Vector2();
 init();
 
 function init() {
-  setupMainScene();
-  setupIsolatedScene();
-  loadSkeletonModel();
-  loadSkeletonStand(); // Load the skeleton stand
-  loadOperatingRoomModel(); // Start loading the operating room in the background
-  setupEventListeners();
-  animate();
+  try {
+    setupMainScene();
+    setupIsolatedScene();
+    loadSkeletonModel();
+    loadSkeletonStand(); // Load the skeleton stand
+    loadOperatingRoomModel(); // Start loading the operating room in the background
+    setupEventListeners();
+    animate();
+  } catch (error) {
+    console.error("Initialization error (likely WebGL disabled/unsupported):", error);
+    if (loadingText) {
+      loadingText.innerHTML = "WebGL Context Creation Failed.<br><span style='font-size:16px; color:#ff4d4d;'>Hardware Acceleration is disabled in Chrome.</span><br><span style='font-size:14px; color:#a0aec0; display:block; margin-top:8px;'>To fix:<br>1. Go to <b>Settings</b> in Chrome.<br>2. Search for <b>\"graphics acceleration\"</b>.<br>3. Turn on <b>\"Use graphics acceleration when available\"</b>.<br>4. Relaunch your browser and refresh this page.</span>";
+    }
+  }
 }
 
 // 1. Setup Main 3D Scene
@@ -255,7 +262,7 @@ function loadSkeletonModel() {
   const loader = new GLTFLoader();
 
   loader.load(
-    './skeleton/human_skeleton.glb',
+    './skeleton/human_skeleton.glb?v=48',
     (gltf) => {
       skeletonGroup = gltf.scene;
 
@@ -700,7 +707,7 @@ function isolateBoneInSubViewport(bone, key) {
 
       const loader = new GLTFLoader();
       loader.load(
-        './skeleton/human_male_skull.glb',
+        './skeleton/human_male_skull.glb?v=48',
         (gltf) => {
           loadedSkullModel = gltf.scene;
 
@@ -1616,7 +1623,7 @@ function onControllerSelect(controller) {
 function loadOperatingRoomModel() {
   const loader = new GLTFLoader();
   loader.load(
-    './skeleton/charite_university_hospital_-_operating_room.glb',
+    './skeleton/charite_university_hospital_-_operating_room.glb?v=48',
     (gltf) => {
       operatingRoomGroup = gltf.scene;
 
@@ -1905,7 +1912,7 @@ function speakBoneDetails(bone) {
 function loadSkeletonStand() {
   const loader = new GLTFLoader();
   loader.load(
-    './skeleton/IVPole.glb',
+    './skeleton/IVPole.glb?v=48',
     (gltf) => {
       skeletonStandGroup = gltf.scene;
 
