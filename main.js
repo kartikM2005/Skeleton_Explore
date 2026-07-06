@@ -1500,14 +1500,64 @@ function updateVRLocomotion(dt) {
     if (Math.abs(joystickX) < 0.1) joystickX = 0;
     if (Math.abs(joystickY) < 0.1) joystickY = 0;
 
-    // Close panel if thumbstick click (buttons[3]) or B/Y button (buttons[5]) is pressed
+    // Handle controller buttons
     const buttons = source.gamepad.buttons;
-    if (buttons && (
-      (buttons[3] && buttons[3].pressed) ||
-      (buttons[5] && buttons[5].pressed)
-    )) {
-      deselectAll();
-      return;
+    if (buttons) {
+      const aPressed = !!(buttons[4] && buttons[4].pressed);
+      const bPressed = !!(buttons[5] && buttons[5].pressed);
+      const thumbstickPressed = !!(buttons[3] && buttons[3].pressed);
+
+      const keyA = `${handedness}_button_4`;
+      const keyB = `${handedness}_button_5`;
+      const keyThumb = `${handedness}_button_3`;
+
+      // Thumbstick click closes the panel
+      if (thumbstickPressed && !window[keyThumb]) {
+        window[keyThumb] = true;
+        deselectAll();
+      } else if (!thumbstickPressed) {
+        window[keyThumb] = false;
+      }
+
+      // A/X Button click (edge triggered)
+      if (aPressed && !window[keyA]) {
+        window[keyA] = true;
+        if (handedness === 'right') {
+          deselectAll(); // Right A closes the panel
+        }
+      } else if (!aPressed) {
+        window[keyA] = false;
+      }
+
+      // B/Y Button click (edge triggered)
+      if (bPressed && !window[keyB]) {
+        window[keyB] = true;
+        if (handedness === 'right') {
+          // Right B opens the panel for the pointed-at bone
+          const controller = mainRenderer.xr.getController(index);
+          if (controller) {
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+            const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
+            xrRaycaster.set(origin, direction);
+
+            if (skeletonMesh) {
+              const intersectsSkeleton = xrRaycaster.intersectObject(skeletonMesh);
+              if (intersectsSkeleton.length > 0) {
+                const intersect = intersectsSkeleton[0];
+                const boneKey = getClosestBoneVR(intersect.point);
+                if (boneKey) {
+                  selectBone(boneKey);
+                }
+              }
+            }
+          }
+        } else {
+          deselectAll(); // Left Y closes the panel
+        }
+      } else if (!bPressed) {
+        window[keyB] = false;
+      }
     }
 
     // LEFT controller translates the player rig (Walking)
