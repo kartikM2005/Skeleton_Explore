@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { BONES_DATA } from './data.js';
 
 // DOM Elements
@@ -31,6 +32,7 @@ let mainScene, mainCamera, mainRenderer, mainControls;
 let isolatedScene, isolatedCamera, isolatedRenderer, isolatedControls;
 let skeletonMesh = null; // The loaded Mesh Object_2
 let skeletonGroup = null; // Group containing the GLB scene
+let skeletonStandGroup = null; // Group containing the IV pole stand
 let highlightedBoneMesh = null; // Mesh overlay showing active selection
 let currentSelectedBone = null;
 let currentHoveredBone = null;
@@ -40,7 +42,11 @@ let loadedSkullModel = null;
 let isSkullLoading = false;
 let gridHelper = null;
 let floorPlane = null;
+let dolly = null; // Camera rig group for WebXR locomotion
+let cameraPitchGroup = null; // Intermediate group for looking up/down
 let controller1 = null, controller2 = null; // 6DoF WebXR controllers (for Zapbox)
+let controllerGrip1 = null, controllerGrip2 = null; // Visual models for controller grips
+const clock = new THREE.Clock(); // Locomotion delta time tracker
 let operatingRoomGroup = null; // 3D Operating Room model for VR mode
 let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
 let vrBonePreview = null; // Isolated bone geometry floating inside VR world
@@ -71,6 +77,7 @@ function init() {
   setupMainScene();
   setupIsolatedScene();
   loadSkeletonModel();
+  loadSkeletonStand(); // Load the skeleton stand
   loadOperatingRoomModel(); // Start loading the operating room in the background
   setupEventListeners();
   animate();
@@ -148,16 +155,37 @@ function setupMainScene() {
   floorPlane.receiveShadow = true;
   mainScene.add(floorPlane);
 
+  // Create Dolly / Player Rig for VR locomotion
+  dolly = new THREE.Group();
+  dolly.position.set(0, 0, 0);
+  mainScene.add(dolly);
+
+  // Group to handle looking up/down artificially
+  cameraPitchGroup = new THREE.Group();
+  dolly.add(cameraPitchGroup);
+  cameraPitchGroup.add(mainCamera);
+
   // 6DoF Controllers Setup for Zapbox / VR inputs
   controller1 = mainRenderer.xr.getController(0);
   controller1.addEventListener('selectstart', () => onControllerSelect(controller1));
   controller1.addEventListener('squeezestart', deselectAll);
-  mainScene.add(controller1);
+  cameraPitchGroup.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
   controller2.addEventListener('selectstart', () => onControllerSelect(controller2));
   controller2.addEventListener('squeezestart', deselectAll);
-  mainScene.add(controller2);
+  cameraPitchGroup.add(controller2);
+
+  // Controller Grip models setup
+  const controllerModelFactory = new XRControllerModelFactory();
+
+  controllerGrip1 = mainRenderer.xr.getControllerGrip(0);
+  controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+  cameraPitchGroup.add(controllerGrip1);
+
+  controllerGrip2 = mainRenderer.xr.getControllerGrip(1);
+  controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+  cameraPitchGroup.add(controllerGrip2);
 
   // Visual pointer rays for 6DoF aiming
   const laserGeom = new THREE.BufferGeometry().setFromPoints([
@@ -266,11 +294,21 @@ function loadSkeletonModel() {
       skeletonGroup.position.set(0, skeletonBottomOffset, 0);
       
       mainScene.add(skeletonGroup);
-
-      // Setup camera target and height dynamically based on the model's actual bounds
+      
+      if (skeletonStandGroup) {
+        attachStandToSkeleton();
+      }
+      
       const finalBox = new THREE.Box3().setFromObject(skeletonGroup);
       const center = finalBox.getCenter(new THREE.Vector3());
       const size = finalBox.getSize(new THREE.Vector3());
+      console.log("=== SKELETON MODEL DIMENSIONS ===");
+      console.log(`Size: x=${size.x.toFixed(4)}, y=${size.y.toFixed(4)}, z=${size.z.toFixed(4)}`);
+      console.log(`Center: x=${center.x.toFixed(4)}, y=${center.y.toFixed(4)}, z=${center.z.toFixed(4)}`);
+      console.log(`Min: x=${finalBox.min.x.toFixed(4)}, y=${finalBox.min.y.toFixed(4)}, z=${finalBox.min.z.toFixed(4)}`);
+      console.log(`Max: x=${finalBox.max.x.toFixed(4)}, y=${finalBox.max.y.toFixed(4)}, z=${finalBox.max.z.toFixed(4)}`);
+
+      // Setup camera target and height dynamically based on the model's actual bounds
       
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
@@ -935,7 +973,7 @@ async function startXRSession(mode) {
   
   try {
     const session = await navigator.xr.requestSession(mode, {
-      optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
+      optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'gamepad']
     });
     
     xrSession = session;
@@ -985,6 +1023,15 @@ async function startXRSession(mode) {
       if (gridHelper) gridHelper.visible = true;
       if (floorPlane) floorPlane.visible = true;
 
+      // Reset dolly position and rotation to origin
+      if (dolly) {
+        dolly.position.set(0, 0, 0);
+        dolly.rotation.set(0, 0, 0);
+      }
+      if (cameraPitchGroup) {
+        cameraPitchGroup.rotation.set(0, 0, 0);
+      }
+
       // Restore skeleton position and rotation
       skeletonGroup.position.set(0, skeletonBottomOffset, 0);
       skeletonGroup.rotation.set(0, 0, 0);
@@ -1021,9 +1068,13 @@ function render() {
     mainControls.update();
   }
   
-  // Update XR 6DoF controller pointer raycasting when presenting in VR/AR (Zapbox)
+  // Update XR 6DoF controller pointer raycasting and VR locomotion when presenting in VR/AR (Zapbox)
   if (mainRenderer.xr.isPresenting) {
     updateXRControllerRaycast();
+    const dt = Math.min(clock.getDelta(), 0.1); // Clamp to prevent giant leaps on frame stutters
+    updateVRLocomotion(dt);
+  } else {
+    clock.getDelta(); // Keep clock updating to prevent giant dt on next VR entry
   }
   
   // Auto-rotate skeleton slowly if nothing is selected and not in VR/AR
@@ -1035,7 +1086,7 @@ function render() {
   }
 
   // Keep skeleton centered (the layout containers handle side-by-side positioning automatically)
-  if (skeletonGroup) {
+  if (skeletonGroup && !mainRenderer.xr.isPresenting && !webcamARActive) {
     skeletonGroup.position.x = 0;
   }
   
@@ -1065,6 +1116,8 @@ function render() {
       .addScaledVector(camUp,     -0.05);
     vrInfoPanel.quaternion.copy(mainCamera.quaternion);
   }
+
+
 }
 
 // --- Webcam AR (Mobile Pass-Through AR without installations) ---
@@ -1323,9 +1376,190 @@ const xrRaycaster = new THREE.Raycaster();
 const tempMatrix = new THREE.Matrix4();
 
 function updateXRControllerRaycast() {
-  // Disabled hover raycasting in VR mode to keep the cycling experience focused and clean
-  return;
+  if (!mainRenderer.xr.isPresenting) return;
+
+  const controllers = [controller1, controller2];
+
+  controllers.forEach((controller) => {
+    if (!controller) return;
+
+    const laser = controller.getObjectByName('laser');
+    if (!laser) return;
+
+    // Default laser length is 5 meters
+    let laserLength = 5;
+    let hitFound = false;
+
+    // Perform Raycasting from the controller
+    tempMatrix.identity().extractRotation(controller.matrixWorld);
+    const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+    const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
+    xrRaycaster.set(origin, direction);
+
+    // Check intersection with Skeleton Mesh
+    if (skeletonMesh) {
+      const intersects = xrRaycaster.intersectObject(skeletonMesh);
+      if (intersects.length > 0) {
+        laserLength = intersects[0].distance;
+        hitFound = true;
+      }
+    }
+
+    // Check intersection with VR Close Button
+    if (vrCloseButton && vrCloseButton.visible) {
+      const intersectsClose = xrRaycaster.intersectObject(vrCloseButton);
+      if (intersectsClose.length > 0) {
+        laserLength = Math.min(laserLength, intersectsClose[0].distance);
+        hitFound = true;
+      }
+    }
+
+    // Update laser line visual length
+    const positions = laser.geometry.attributes.position.array;
+    positions[5] = -laserLength; // Update the Z coordinate of the end point
+    laser.geometry.attributes.position.needsUpdate = true;
+
+    // Change laser color to cyan if hovering, otherwise dim blue
+    if (hitFound) {
+      laser.material.color.setHex(0x00f2fe); // Cyan on hover
+      laser.material.opacity = 1.0;
+    } else {
+      laser.material.color.setHex(0x4facfe); // Dim blue
+      laser.material.opacity = 0.5;
+    }
+  });
 }
+
+function updateVRLocomotion(dt) {
+  const session = mainRenderer.xr.getSession();
+  if (!session || !dolly) return;
+
+  const speed = 2.5;
+  const moveVector = new THREE.Vector3();
+
+  // Retrieve active WebXR camera which tracks headset position/rotation
+  let xrCamera;
+  try {
+    xrCamera = mainRenderer.xr.getCamera(mainCamera);
+  } catch (e) {
+    xrCamera = mainCamera;
+  }
+  if (!xrCamera) return;
+
+  // Visual debug counter to log state once every 60 frames (~1 second) to prevent console spam
+  if (!window.locomotionDebugTimer) window.locomotionDebugTimer = 0;
+  window.locomotionDebugTimer++;
+  const shouldLog = (window.locomotionDebugTimer % 60 === 0);
+
+  if (shouldLog) {
+    console.log(`[Locomotion Debug] Active WebXR Session. Input sources count: ${session.inputSources.length}`);
+  }
+
+  session.inputSources.forEach((source, index) => {
+    const handedness = source.handedness;
+    const hasGamepad = !!source.gamepad;
+
+    if (shouldLog) {
+      console.log(`[Locomotion Debug] Hand: ${handedness} | Has Gamepad: ${hasGamepad}`);
+    }
+
+    if (!source.gamepad || !source.gamepad.axes) return;
+
+    const axes = source.gamepad.axes;
+    
+    // WebXR standard gamepad thumbstick mappings:
+    // Typically axes[2] is horizontal and axes[3] is vertical.
+    // If the device maps the thumbstick to axes[0] and axes[1], we fallback.
+    let joystickX = 0;
+    let joystickY = 0;
+    if (axes.length >= 4 && (Math.abs(axes[2]) > 0.05 || Math.abs(axes[3]) > 0.05)) {
+      joystickX = axes[2];
+      joystickY = axes[3];
+    } else if (axes.length >= 2) {
+      joystickX = axes[0];
+      joystickY = axes[1];
+    }
+
+    // Console log when joystick is actively pushed
+    if (Math.abs(joystickX) > 0.05 || Math.abs(joystickY) > 0.05) {
+      console.log(`[Locomotion Input] Hand: ${handedness} | Joysticks: xAxis=${joystickX.toFixed(2)}, yAxis=${joystickY.toFixed(2)} | Axes Array: [${axes.map(a => a.toFixed(2)).join(', ')}]`);
+    }
+
+    // Deadzone filter to prevent drifting
+    if (Math.abs(joystickX) < 0.1) joystickX = 0;
+    if (Math.abs(joystickY) < 0.1) joystickY = 0;
+
+    // Close panel if thumbstick click (buttons[3]) or B/Y button (buttons[5]) is pressed
+    const buttons = source.gamepad.buttons;
+    if (buttons && (
+      (buttons[3] && buttons[3].pressed) || 
+      (buttons[5] && buttons[5].pressed)
+    )) {
+      deselectAll();
+      return;
+    }
+
+    // LEFT controller translates the player rig (Walking)
+    if (handedness === 'left') {
+      if (Math.abs(joystickX) > 0 || Math.abs(joystickY) > 0) {
+        const controller = mainRenderer.xr.getController(index);
+        if (controller) {
+          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion);
+          forward.y = 0;
+          forward.normalize();
+
+          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(controller.quaternion);
+          right.y = 0;
+          right.normalize();
+
+          moveVector.addScaledVector(forward, -joystickY);
+          moveVector.addScaledVector(right, joystickX);
+        }
+      }
+    } 
+    // RIGHT controller rotates the player rig (Turning / Looking around)
+    else if (handedness === 'right') {
+      const turnSpeed = 1.3; // Radians per second
+
+      // Horizontal Turning (Yaw)
+      if (Math.abs(joystickX) > 0) {
+        // Pivot around the active XR camera's current position (preventing the swing effect)
+        xrCamera.updateMatrixWorld(true);
+        const headsetWorldPos = new THREE.Vector3();
+        xrCamera.getWorldPosition(headsetWorldPos);
+
+        // Apply rotation to the dolly
+        dolly.rotation.y -= joystickX * turnSpeed * dt;
+        dolly.updateMatrixWorld(true);
+
+        // Get active XR camera's new world position and correct dolly shift
+        const newHeadsetWorldPos = new THREE.Vector3();
+        xrCamera.getWorldPosition(newHeadsetWorldPos);
+
+        const shift = new THREE.Vector3().subVectors(headsetWorldPos, newHeadsetWorldPos);
+        dolly.position.add(shift);
+      }
+
+      // Vertical Tilting (Pitch)
+      if (Math.abs(joystickY) > 0 && cameraPitchGroup) {
+        cameraPitchGroup.rotation.x -= joystickY * turnSpeed * dt;
+        // Limit pitch to prevent flipping upside down (-80 to 80 degrees)
+        cameraPitchGroup.rotation.x = Math.max(-1.4, Math.min(1.4, cameraPitchGroup.rotation.x));
+      }
+    }
+  });
+
+  // Apply movement to the container (dolly)
+  if (moveVector.lengthSq() > 0) {
+    moveVector.normalize().multiplyScalar(speed * dt);
+    dolly.position.add(moveVector);
+
+    // Room boundaries (keep user inside the lab floor space)
+    dolly.position.x = Math.max(-20, Math.min(20, dolly.position.x));
+    dolly.position.z = Math.max(-20, Math.min(20, dolly.position.z));
+  }
+}
+
 
 function onControllerSelect(controller) {
   if (!mainRenderer.xr.isPresenting) return;
@@ -1341,14 +1575,34 @@ function onControllerSelect(controller) {
   }
   
   lastTriggerTime = currentTime;
-  
-  // Squeezing/clicking any controller trigger cycles through the bones in order (Skull -> Spine -> Pelvis -> etc.)
-  // This requires zero aiming or wobbly raycasting!
-  const boneKeys = Object.keys(BONES_DATA);
-  vrCycleIndex = (vrCycleIndex + 1) % boneKeys.length;
-  
-  const targetBoneKey = boneKeys[vrCycleIndex];
-  selectBone(targetBoneKey);
+
+  // Perform Raycasting from the controller
+  tempMatrix.identity().extractRotation(controller.matrixWorld);
+  const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+  const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
+  xrRaycaster.set(origin, direction);
+
+  // 1. Check intersection with CLOSE button on the VR panel
+  if (vrCloseButton && vrCloseButton.visible) {
+    const intersectsClose = xrRaycaster.intersectObject(vrCloseButton);
+    if (intersectsClose.length > 0) {
+      deselectAll();
+      return;
+    }
+  }
+
+  // 2. Check intersection with Skeleton Mesh
+  if (skeletonMesh) {
+    const intersectsSkeleton = xrRaycaster.intersectObject(skeletonMesh);
+    if (intersectsSkeleton.length > 0) {
+      const intersect = intersectsSkeleton[0];
+      const boneKey = getClosestBoneVR(intersect.point);
+      if (boneKey) {
+        selectBone(boneKey);
+        return;
+      }
+    }
+  }
 }
 
 // 11. Load the 3D Operating Room Model
@@ -1551,7 +1805,11 @@ function showVRInfoPanel(bone, key) {
   }
   vrInfoPanel.add(vrCloseButton);
   vrInfoPanel.visible = true;
-  mainScene.add(vrInfoPanel);
+  if (cameraPitchGroup) {
+    cameraPitchGroup.add(vrInfoPanel);
+  } else {
+    dolly.add(vrInfoPanel);
+  }
 }
 
 function hideVRInfoPanel() {
@@ -1565,11 +1823,19 @@ function hideVRInfoPanel() {
         }
       }
     });
-    mainScene.remove(vrInfoPanel);
+    if (cameraPitchGroup) {
+      cameraPitchGroup.remove(vrInfoPanel);
+    } else if (dolly) {
+      dolly.remove(vrInfoPanel);
+    }
     vrInfoPanel = null;
   }
   if (vrBonePreview) {
-    mainScene.remove(vrBonePreview);
+    if (cameraPitchGroup) {
+      cameraPitchGroup.remove(vrBonePreview);
+    } else if (dolly) {
+      dolly.remove(vrBonePreview);
+    }
     vrBonePreview = null;
   }
   vrCloseButton = null;
@@ -1618,5 +1884,78 @@ function speakBoneDetails(bone) {
   }
 
   window.speechSynthesis.speak(utterance);
+}
+
+// 14. Load and Position Skeleton Stand
+function loadSkeletonStand() {
+  const loader = new GLTFLoader();
+  loader.load(
+    './skeleton/IVPole.glb',
+    (gltf) => {
+      skeletonStandGroup = gltf.scene;
+      
+      // Compute and log dimensions
+      const box = new THREE.Box3().setFromObject(skeletonStandGroup);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      console.log("=== SKELETON STAND (IVPole.glb) DIMENSIONS ===");
+      console.log(`Size: x=${size.x.toFixed(4)}, y=${size.y.toFixed(4)}, z=${size.z.toFixed(4)}`);
+      console.log(`Center: x=${center.x.toFixed(4)}, y=${center.y.toFixed(4)}, z=${center.z.toFixed(4)}`);
+      console.log(`Min: x=${box.min.x.toFixed(4)}, y=${box.min.y.toFixed(4)}, z=${box.min.z.toFixed(4)}`);
+      console.log(`Max: x=${box.max.x.toFixed(4)}, y=${box.max.y.toFixed(4)}, z=${box.max.z.toFixed(4)}`);
+      
+      skeletonStandGroup.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          const childBox = new THREE.Box3().setFromObject(child);
+          const childCenter = childBox.getCenter(new THREE.Vector3());
+          console.log(`Mesh: ${child.name} | Center: x=${childCenter.x.toFixed(4)}, y=${childCenter.y.toFixed(4)}, z=${childCenter.z.toFixed(4)}`);
+        }
+      });
+      
+      if (skeletonGroup) {
+        attachStandToSkeleton();
+      }
+    },
+    undefined,
+    (error) => {
+      console.error('Error loading skeleton stand:', error);
+    }
+  );
+}
+
+// 15. Helper to align the stand and attach a hanging rod
+function attachStandToSkeleton() {
+  if (!skeletonGroup || !skeletonStandGroup) return;
+
+  const STAND_SCALE = 0.151;
+  const localScale = STAND_SCALE / SCALE_FACTOR; // 0.151 / 0.11 ≈ 1.3727
+  
+  skeletonStandGroup.scale.set(localScale, localScale, localScale);
+  
+  // Align Hook1 (local x=-0.0145, y=12.2649, z=0.7102 in stand space)
+  // to hang exactly over skeleton origin (local x=0, y=16.65, z=0 in skeletonGroup space)
+  const standLocalX = 0.0145 * localScale;
+  const standLocalZ = -0.7102 * localScale;
+  const standLocalY = -8.1475; // sets stand base on the floor (Y = 0 in world)
+  
+  skeletonStandGroup.position.set(standLocalX, standLocalY, standLocalZ);
+  
+  skeletonGroup.add(skeletonStandGroup);
+
+  // Add a small metallic hanging rod connecting skull to the stand's hook
+  // top of head is at local Y ≈ 15.88, hook is at local Y ≈ 16.68
+  const rodGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8);
+  const rodMaterial = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    roughness: 0.2,
+    metalness: 0.8
+  });
+  const rodMesh = new THREE.Mesh(rodGeometry, rodMaterial);
+  rodMesh.position.set(0, 16.28, 0);
+  skeletonGroup.add(rodMesh);
+
+  console.log("Skeleton stand successfully attached to the skeleton group.");
 }
 
