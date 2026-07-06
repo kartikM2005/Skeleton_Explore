@@ -291,7 +291,7 @@ function loadSkeletonModel() {
 
       // Calculate offset so the bottom of the feet rests exactly at Y = 0
       skeletonBottomOffset = -scaledMin.y;
-      skeletonGroup.position.set(-2.0, skeletonBottomOffset, 1.0);
+      skeletonGroup.position.set(0, skeletonBottomOffset, 0);
 
       mainScene.add(skeletonGroup);
       if (skeletonStandGroup) {
@@ -997,8 +997,8 @@ async function startXRSession(mode) {
         operatingRoomGroup.visible = true;
       }
 
-      // Position the skeleton standing in front and slightly to the right of the user
-      skeletonGroup.position.set(0.4, skeletonBottomOffset, -1.2);
+      // Position the skeleton standing in the large empty space of the VR room
+      skeletonGroup.position.set(-2.0, skeletonBottomOffset, 1.0);
       skeletonGroup.rotation.set(0, 0, 0);
       skeletonGroup.updateMatrixWorld(true);
     }
@@ -1612,8 +1612,8 @@ function loadOperatingRoomModel() {
     (gltf) => {
       operatingRoomGroup = gltf.scene;
 
-      // Keep visible by default for desktop immersion
-      operatingRoomGroup.visible = true;
+      // Keep hidden by default; only show in VR mode
+      operatingRoomGroup.visible = false;
 
       // Enable shadow receiving on meshes in the room
       operatingRoomGroup.traverse((child) => {
