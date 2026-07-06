@@ -86,7 +86,7 @@ function init() {
 // 1. Setup Main 3D Scene
 function setupMainScene() {
   const canvas = document.getElementById('canvas-main');
-  
+
   // Scene
   mainScene = new THREE.Scene();
   mainScene.background = null; // transparent to show beautiful CSS radial gradient
@@ -222,9 +222,9 @@ function setupMainScene() {
 // 2. Setup Secondary Viewport (Isolated bone)
 function setupIsolatedScene() {
   const canvas = document.getElementById('canvas-isolated');
-  
+
   isolatedScene = new THREE.Scene();
-  
+
   isolatedCamera = new THREE.PerspectiveCamera(40, 1.16, 0.05, 10);
   isolatedCamera.position.set(0, 0, 2.5);
 
@@ -253,19 +253,19 @@ function setupIsolatedScene() {
 // 4. Load the 3D GLB Skeleton Model
 function loadSkeletonModel() {
   const loader = new GLTFLoader();
-  
+
   loader.load(
     './skeleton/human_skeleton.glb',
     (gltf) => {
       skeletonGroup = gltf.scene;
-      
+
       // Find the main mesh - Object_2 contains indices, position attributes
       skeletonGroup.traverse((child) => {
         if (child.isMesh) {
           skeletonMesh = child;
           child.castShadow = true;
           child.receiveShadow = true;
-          
+
           // Apply a high-quality bone-like material
           child.material = new THREE.MeshStandardMaterial({
             color: 0xdddddf,
@@ -281,24 +281,23 @@ function loadSkeletonModel() {
         loadingText.innerText = "Error: Mesh parsing failed.";
         return;
       }
-      
+
       // Apply scaling to make it 1.75 meters tall
       skeletonGroup.scale.set(SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR);
-      
+
       // Recompute size after scaling
       const scaledBox = new THREE.Box3().setFromObject(skeletonGroup);
       const scaledMin = scaledBox.min;
-      
+
       // Calculate offset so the bottom of the feet rests exactly at Y = 0
       skeletonBottomOffset = -scaledMin.y;
-      skeletonGroup.position.set(0, skeletonBottomOffset, 0);
-      
+      skeletonGroup.position.set(-2.0, skeletonBottomOffset, 1.0);
+
       mainScene.add(skeletonGroup);
-      
       if (skeletonStandGroup) {
         attachStandToSkeleton();
       }
-      
+
       const finalBox = new THREE.Box3().setFromObject(skeletonGroup);
       const center = finalBox.getCenter(new THREE.Vector3());
       const size = finalBox.getSize(new THREE.Vector3());
@@ -309,7 +308,7 @@ function loadSkeletonModel() {
       console.log(`Max: x=${finalBox.max.x.toFixed(4)}, y=${finalBox.max.y.toFixed(4)}, z=${finalBox.max.z.toFixed(4)}`);
 
       // Setup camera target and height dynamically based on the model's actual bounds
-      
+
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
         mainControls.target.set(0, center.y + 0.3, 0);
@@ -355,23 +354,23 @@ function createBonePins() {
     const pin = document.createElement('div');
     pin.className = 'bone-pin';
     pin.id = `pin-${key}`;
-    
+
     const dot = document.createElement('div');
     dot.className = 'bone-pin-dot';
-    
+
     const label = document.createElement('div');
     label.className = 'bone-pin-label';
     label.innerText = bone.name;
-    
+
     pin.appendChild(dot);
     pin.appendChild(label);
-    
+
     // Add click event to pin
     pin.addEventListener('click', (e) => {
       e.stopPropagation();
       selectBone(key);
     });
-    
+
     labelsContainer.appendChild(pin);
     bonePins.push({ key, element: pin, localPos: new THREE.Vector3(bone.marker.x, bone.marker.y, bone.marker.z) });
   });
@@ -384,22 +383,22 @@ function updatePins() {
 
   bonePins.forEach((pin) => {
     tempV.copy(pin.localPos);
-    
+
     // Transform local coordinates to world coordinates
     skeletonMesh.localToWorld(tempV);
-    
+
     // Project to screen coordinates
     tempV.project(mainCamera);
-    
+
     const isBehind = tempV.z > 1;
-    
+
     if (isBehind) {
       pin.element.style.display = 'none';
     } else {
       pin.element.style.display = 'flex';
       const x = (tempV.x * 0.5 + 0.5) * mainRenderer.domElement.clientWidth;
       const y = (tempV.y * -0.5 + 0.5) * mainRenderer.domElement.clientHeight;
-      
+
       pin.element.style.left = `${x}px`;
       pin.element.style.top = `${y}px`;
     }
@@ -412,35 +411,35 @@ function sliceGeometry(originalMesh, bounds) {
   const posAttr = geom.attributes.position;
   const normalAttr = geom.attributes.normal;
   const indexAttr = geom.index;
-  
+
   const positions = [];
   const normals = [];
-  
+
   const count = indexAttr ? indexAttr.count : posAttr.count;
-  
+
   function inBounds(x, y, z) {
     return x >= bounds.xMin && x <= bounds.xMax &&
-           y >= bounds.yMin && y <= bounds.yMax &&
-           z >= bounds.zMin && z <= bounds.zMax;
+      y >= bounds.yMin && y <= bounds.yMax &&
+      z >= bounds.zMin && z <= bounds.zMax;
   }
-  
+
   if (indexAttr) {
     for (let i = 0; i < count; i += 3) {
       const idx0 = indexAttr.getX(i);
       const idx1 = indexAttr.getX(i + 1);
       const idx2 = indexAttr.getX(i + 2);
-      
+
       const x0 = posAttr.getX(idx0), y0 = posAttr.getY(idx0), z0 = posAttr.getZ(idx0);
       const x1 = posAttr.getX(idx1), y1 = posAttr.getY(idx1), z1 = posAttr.getZ(idx1);
       const x2 = posAttr.getX(idx2), y2 = posAttr.getY(idx2), z2 = posAttr.getZ(idx2);
-      
+
       if (inBounds(x0, y0, z0) || inBounds(x1, y1, z1) || inBounds(x2, y2, z2)) {
         positions.push(
           x0, y0, z0,
           x1, y1, z1,
           x2, y2, z2
         );
-        
+
         if (normalAttr) {
           normals.push(
             normalAttr.getX(idx0), normalAttr.getY(idx0), normalAttr.getZ(idx0),
@@ -453,9 +452,9 @@ function sliceGeometry(originalMesh, bounds) {
   } else {
     for (let i = 0; i < count; i += 3) {
       const x0 = posAttr.getX(i), y0 = posAttr.getY(i), z0 = posAttr.getZ(i);
-      const x1 = posAttr.getX(i+1), y1 = posAttr.getY(i+1), z1 = posAttr.getZ(i+1);
-      const x2 = posAttr.getX(i+2), y2 = posAttr.getY(i+2), z2 = posAttr.getZ(i+2);
-      
+      const x1 = posAttr.getX(i + 1), y1 = posAttr.getY(i + 1), z1 = posAttr.getZ(i + 1);
+      const x2 = posAttr.getX(i + 2), y2 = posAttr.getY(i + 2), z2 = posAttr.getZ(i + 2);
+
       if (inBounds(x0, y0, z0) || inBounds(x1, y1, z1) || inBounds(x2, y2, z2)) {
         positions.push(
           x0, y0, z0,
@@ -465,32 +464,32 @@ function sliceGeometry(originalMesh, bounds) {
         if (normalAttr) {
           normals.push(
             normalAttr.getX(i), normalAttr.getY(i), normalAttr.getZ(i),
-            normalAttr.getX(i+1), normalAttr.getY(i+1), normalAttr.getZ(i+1),
-            normalAttr.getX(i+2), normalAttr.getY(i+2), normalAttr.getZ(i+2)
+            normalAttr.getX(i + 1), normalAttr.getY(i + 1), normalAttr.getZ(i + 1),
+            normalAttr.getX(i + 2), normalAttr.getY(i + 2), normalAttr.getZ(i + 2)
           );
         }
       }
     }
   }
-  
+
   const slicedGeom = new THREE.BufferGeometry();
   slicedGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   if (normals.length > 0) {
     slicedGeom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   }
-  
+
   return slicedGeom;
 }
 
 // 7. Select Bone Event handler
 function selectBone(key) {
   if (!skeletonMesh) return;
-  
+
   // Clean previous buttons and pins
   if (currentSelectedBone) {
     const prevBtn = document.getElementById(`btn-${currentSelectedBone}`);
     if (prevBtn) prevBtn.classList.remove('active');
-    
+
     const prevPin = document.getElementById(`pin-${currentSelectedBone}`);
     if (prevPin) prevPin.classList.remove('selected');
   }
@@ -500,17 +499,17 @@ function selectBone(key) {
     deselectAll();
     return;
   }
-  
+
   currentSelectedBone = key;
   const bone = BONES_DATA[key];
-  
+
   // Highlight active sidebar button and marker pin
   const btn = document.getElementById(`btn-${key}`);
   if (btn) btn.classList.add('active');
-  
+
   const pin = document.getElementById(`pin-${key}`);
   if (pin) pin.classList.add('selected');
-  
+
   // Update HUD Text Panel
   if (hudBoneName) hudBoneName.innerText = bone.name;
   if (hudBonePronunciation) hudBonePronunciation.innerText = `[${bone.pronunciation}]`;
@@ -518,7 +517,7 @@ function selectBone(key) {
   if (hudBoneFunction) hudBoneFunction.innerText = bone.function;
   if (hudBoneClinical) hudBoneClinical.innerText = bone.clinicalSignificance;
   if (hudBoneFact) hudBoneFact.innerText = bone.funFact;
-  
+
   if (infoPlaceholder) infoPlaceholder.style.display = 'none';
   if (infoContent) infoContent.style.display = 'block';
 
@@ -531,7 +530,7 @@ function selectBone(key) {
 
   // Focus Main Camera on the selected bone
   focusCameraOnBone(bone);
-  
+
   // Slice geometry and show in Isolated Sub-Viewport (HTML panel for 2D)
   isolateBoneInSubViewport(bone, key);
 
@@ -549,11 +548,11 @@ function deselectAll() {
   if (currentSelectedBone) {
     const prevBtn = document.getElementById(`btn-${currentSelectedBone}`);
     if (prevBtn) prevBtn.classList.remove('active');
-    
+
     const prevPin = document.getElementById(`pin-${currentSelectedBone}`);
     if (prevPin) prevPin.classList.remove('selected');
   }
-  
+
   currentSelectedBone = null;
   vrCycleIndex = -1; // Reset cycling tracker
   if (infoContent) infoContent.style.display = 'none';
@@ -567,17 +566,17 @@ function deselectAll() {
   // Toggle active class on app-container
   const appContainer = document.getElementById('app-container');
   if (appContainer) appContainer.classList.remove('dossier-active');
-  
+
   // Hide isolated panel
   subViewport.classList.remove('visible');
-  
+
   // Remove highlighted mesh
   if (highlightedBoneMesh) {
     mainScene.remove(highlightedBoneMesh);
     highlightedBoneMesh.geometry.dispose();
     highlightedBoneMesh = null;
   }
-  
+
   // Reset main camera target to the center of the skeleton
   if (skeletonGroup) {
     const finalBox = new THREE.Box3().setFromObject(skeletonGroup);
@@ -596,7 +595,7 @@ function tweenTargetTo(targetPos) {
   let duration = 25; // frames
   let frame = 0;
   const startTarget = mainControls.target.clone();
-  
+
   function tween() {
     if (frame < duration) {
       frame++;
@@ -637,7 +636,7 @@ function adjustIsolatedCameraForObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const sphere = box.getBoundingSphere(new THREE.Sphere());
   const radius = sphere.radius;
-  
+
   console.log("adjustIsolatedCameraForObject - radius:", radius, "box:", box);
 
   // Set camera clipping planes dynamically to prevent clipping of large/small models
@@ -648,15 +647,15 @@ function adjustIsolatedCameraForObject(object) {
   // Set OrbitControls min and max zoom limits dynamically based on object's radius
   isolatedControls.minDistance = radius * 0.5;
   isolatedControls.maxDistance = radius * 12.0;
-  
+
   // Position camera further back so the model fits with nice margins (appears smaller)
   isolatedCamera.position.set(0, 0, radius * 4.5);
-  
+
   // Update controls target and update controls
   isolatedControls.target.set(0, 0, 0);
   isolatedControls.update();
   isolatedControls.saveState(); // Save as new default reset state for this bone
-  
+
   // Force resize of sub-renderer to fit the container bounds
   const subContainer = document.querySelector('.dossier-canvas-container');
   if (subContainer) {
@@ -698,33 +697,33 @@ function isolateBoneInSubViewport(bone, key) {
       adjustIsolatedCameraForObject(loadedSkullModel);
     } else {
       if (subLoading) subLoading.style.display = 'flex';
-      
+
       const loader = new GLTFLoader();
       loader.load(
         './skeleton/human_male_skull.glb',
         (gltf) => {
           loadedSkullModel = gltf.scene;
-          
+
           loadedSkullModel.traverse((child) => {
             if (child.isMesh) {
               child.castShadow = true;
               child.receiveShadow = true;
             }
           });
-          
+
           // 1. Scale down the model to make it look smaller and match standard bone sizes
           loadedSkullModel.scale.set(0.3, 0.3, 0.3);
-          
+
           // 2. Update matrix world so Box3 gets the scaled size
           loadedSkullModel.updateMatrixWorld(true);
-          
+
           // 3. Center the loaded skull model
           const box = new THREE.Box3().setFromObject(loadedSkullModel);
           const center = box.getCenter(new THREE.Vector3());
           loadedSkullModel.position.sub(center);
-          
+
           if (subLoading) subLoading.style.display = 'none';
-          
+
           // Only add to scene if skull is still the selected bone
           if (currentSelectedBone === 'skull') {
             isolatedScene.add(loadedSkullModel);
@@ -747,7 +746,7 @@ function isolateBoneInSubViewport(bone, key) {
 
     // 2. Slice the geometry
     const slicedGeom = sliceGeometry(skeletonMesh, bone.bounds);
-    
+
     // 3. Create high detail clay model for sub-viewport
     const material = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -755,21 +754,21 @@ function isolateBoneInSubViewport(bone, key) {
       metalness: 0.1,
       flatShading: false
     });
-    
+
     const isolatedMesh = new THREE.Mesh(slicedGeom, material);
-    
+
     // Align isolated mesh at the center of the isolated scene!
     slicedGeom.computeBoundingBox();
     slicedGeom.center();
-    
+
     // Rotate the isolated mesh to stand upright (Z local matches Y world)
     isolatedMesh.rotation.x = -Math.PI / 2;
-    
+
     isolatedScene.add(isolatedMesh);
-    
+
     // 4. Position Camera based on size of bone
     adjustIsolatedCameraForObject(isolatedMesh);
-    
+
     // 5. Reveal panel
     subViewport.classList.add('visible');
   }
@@ -783,17 +782,17 @@ function setupEventListeners() {
     onResize();
   });
   resizeObserver.observe(viewportContainer);
-  
+
   // Main canvas clicks
   const canvas = document.getElementById('canvas-main');
   canvas.addEventListener('click', onCanvasClick);
   canvas.addEventListener('mousemove', onCanvasHover);
-  
+
   // Floating Viewport Control buttons
   document.getElementById('btn-close-sub').addEventListener('click', () => {
     deselectAll();
   });
-  
+
   document.getElementById('btn-reset-sub').addEventListener('click', () => {
     isolatedControls.reset();
   });
@@ -801,7 +800,7 @@ function setupEventListeners() {
   // WebXR Activation Event Listeners
   btnVR.addEventListener('click', () => startXRSession('immersive-vr'));
   btnAR.addEventListener('click', () => toggleWebcamAR());
-  
+
   xrClose.addEventListener('click', () => {
     if (xrSession) xrSession.end();
   });
@@ -838,7 +837,7 @@ function onResize() {
   mainCamera.aspect = w / h;
   mainCamera.updateProjectionMatrix();
   mainRenderer.setSize(w, h);
-  
+
   // Resize isolated renderer to fit its container
   const subContainer = document.querySelector('.dossier-canvas-container');
   if (subContainer && isolatedRenderer) {
@@ -854,20 +853,20 @@ function onResize() {
 function onCanvasClick(e) {
   const container = document.getElementById('viewport-container');
   const rect = mainRenderer.domElement.getBoundingClientRect();
-  
+
   mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
   mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
-  
+
   raycaster.setFromCamera(mouse, mainCamera);
-  
+
   if (skeletonMesh) {
     const intersects = raycaster.intersectObject(skeletonMesh);
-    
+
     if (intersects.length > 0) {
       const intersect = intersects[0];
       const localPoint = intersect.point.clone();
       skeletonMesh.worldToLocal(localPoint);
-      
+
       const boneKey = getClosestBoneAtLocalPoint(localPoint);
       if (boneKey) {
         selectBone(boneKey);
@@ -880,14 +879,14 @@ function onCanvasClick(e) {
 function onCanvasHover(e) {
   const container = document.getElementById('viewport-container');
   const rect = mainRenderer.domElement.getBoundingClientRect();
-  
+
   mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
   mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
-  
+
   raycaster.setFromCamera(mouse, mainCamera);
-  
+
   let hoveredKey = null;
-  
+
   if (skeletonMesh) {
     const intersects = raycaster.intersectObject(skeletonMesh);
     if (intersects.length > 0) {
@@ -896,15 +895,15 @@ function onCanvasHover(e) {
       hoveredKey = getClosestBoneAtLocalPoint(localPoint);
     }
   }
-  
+
   if (hoveredKey !== currentHoveredBone) {
     if (currentHoveredBone) {
       const pin = document.getElementById(`pin-${currentHoveredBone}`);
       if (pin) pin.classList.remove('hovered');
     }
-    
+
     currentHoveredBone = hoveredKey;
-    
+
     if (currentHoveredBone) {
       const pin = document.getElementById(`pin-${currentHoveredBone}`);
       if (pin) pin.classList.add('hovered');
@@ -919,19 +918,19 @@ function onCanvasHover(e) {
 function getClosestBoneAtLocalPoint(localPoint) {
   let candidate = null;
   let minDistance = Infinity;
-  
+
   Object.entries(BONES_DATA).forEach(([key, bone]) => {
     const dx = localPoint.x - bone.marker.x;
     const dy = localPoint.y - bone.marker.y;
     const dz = localPoint.z - bone.marker.z;
-    const dist = dx*dx + dy*dy + dz*dz;
-    
+    const dist = dx * dx + dy * dy + dz * dz;
+
     if (dist < minDistance) {
       minDistance = dist;
       candidate = key;
     }
   });
-  
+
   return candidate;
 }
 
@@ -947,7 +946,7 @@ function getClosestBoneVR(worldHitPoint) {
   if (!skeletonMesh) return null;
   // Ensure the mesh's world matrix has the fresh translation/rotation/scale updates
   skeletonMesh.updateMatrixWorld(true);
-  
+
   const localPoint = worldHitPoint.clone();
   skeletonMesh.worldToLocal(localPoint);
   return getClosestBoneAtLocalPoint(localPoint);
@@ -959,27 +958,27 @@ async function startXRSession(mode) {
     await xrSession.end();
     return;
   }
-  
+
   if (!navigator.xr) {
     showXRMessage("WebXR is not supported by your browser. Use a compatible VR headset or AR phone.");
     return;
   }
-  
+
   const supported = await navigator.xr.isSessionSupported(mode);
   if (!supported) {
     showXRMessage(`WebXR ${mode === 'immersive-ar' ? 'AR' : 'VR'} mode is not supported on this hardware.`);
     return;
   }
-  
+
   try {
     const session = await navigator.xr.requestSession(mode, {
       optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'gamepad']
     });
-    
+
     xrSession = session;
     mainRenderer.xr.setReferenceSpaceType(mode === 'immersive-ar' ? 'local' : 'local-floor');
     await mainRenderer.xr.setSession(session);
-    
+
     if (mode === 'immersive-ar') {
       mainScene.background = null;
       mainRenderer.setClearAlpha(0);
@@ -997,27 +996,27 @@ async function startXRSession(mode) {
       if (operatingRoomGroup) {
         operatingRoomGroup.visible = true;
       }
-      
+
       // Position the skeleton standing in front and slightly to the right of the user
       skeletonGroup.position.set(0.4, skeletonBottomOffset, -1.2);
       skeletonGroup.rotation.set(0, 0, 0);
       skeletonGroup.updateMatrixWorld(true);
     }
-    
+
     showXRMessage(`Entered XR Session. Put on your device!`);
-    
+
     session.addEventListener('end', () => {
       xrSession = null;
       hideXRMessage();
       mainRenderer.setClearAlpha(1);
-      
+
       // Restore background
       if (mainScene.userData.originalBackground !== undefined) {
         mainScene.background = mainScene.userData.originalBackground;
       } else {
         mainScene.background = null;
       }
-      
+
       // Hide operating room and restore standard helpers
       if (operatingRoomGroup) operatingRoomGroup.visible = false;
       if (gridHelper) gridHelper.visible = true;
@@ -1036,7 +1035,7 @@ async function startXRSession(mode) {
       skeletonGroup.position.set(0, skeletonBottomOffset, 0);
       skeletonGroup.rotation.set(0, 0, 0);
     });
-    
+
   } catch (err) {
     console.error("Failed to start XR session:", err);
     showXRMessage(`Failed to launch WebXR: ${err.message}`);
@@ -1046,7 +1045,7 @@ async function startXRSession(mode) {
 function showXRMessage(msg) {
   xrMessage.innerText = msg;
   xrInstruction.style.display = 'block';
-  
+
   if (!xrSession) {
     setTimeout(() => {
       if (!xrSession) hideXRMessage();
@@ -1067,7 +1066,7 @@ function render() {
   if (!mainRenderer.xr.isPresenting && !webcamARActive) {
     mainControls.update();
   }
-  
+
   // Update XR 6DoF controller pointer raycasting and VR locomotion when presenting in VR/AR (Zapbox)
   if (mainRenderer.xr.isPresenting) {
     updateXRControllerRaycast();
@@ -1076,27 +1075,27 @@ function render() {
   } else {
     clock.getDelta(); // Keep clock updating to prevent giant dt on next VR entry
   }
-  
+
   // Auto-rotate skeleton slowly if nothing is selected and not in VR/AR
   if (!currentSelectedBone && skeletonGroup && !mainRenderer.xr.isPresenting && !webcamARActive) {
     skeletonGroup.rotation.y += 0.003; // Rotate around Y-axis (which is vertical world axis after Sketchfab matrix)
   } else if (currentSelectedBone && skeletonGroup && !webcamARActive) {
     // If a bone is selected, rotate back to face forward slowly (original rotation is 0)
-    skeletonGroup.rotation.y *= 0.92; 
+    skeletonGroup.rotation.y *= 0.92;
   }
 
   // Keep skeleton centered (the layout containers handle side-by-side positioning automatically)
   if (skeletonGroup && !mainRenderer.xr.isPresenting && !webcamARActive) {
     skeletonGroup.position.x = 0;
   }
-  
+
   mainRenderer.render(mainScene, mainCamera);
-  
+
   if (subViewport.classList.contains('visible')) {
     isolatedControls.update();
     isolatedRenderer.render(isolatedScene, isolatedCamera);
   }
-  
+
   if (!mainRenderer.xr.isPresenting && !webcamARActive) {
     updatePins();
     labelsContainer.style.display = 'block';
@@ -1107,13 +1106,13 @@ function render() {
   // Anchor VR info panel in front and to the right of the user's view every frame
   if (mainRenderer.xr.isPresenting && vrInfoPanel && vrInfoPanel.visible) {
     const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
-    const camRight   = new THREE.Vector3(1, 0, 0).applyQuaternion(mainCamera.quaternion);
-    const camUp      = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
+    const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(mainCamera.quaternion);
+    const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(mainCamera.quaternion);
     vrInfoPanel.position
       .copy(mainCamera.position)
       .addScaledVector(camForward, 1.4)
-      .addScaledVector(camRight,   0.55)
-      .addScaledVector(camUp,     -0.05);
+      .addScaledVector(camRight, 0.55)
+      .addScaledVector(camUp, -0.05);
     vrInfoPanel.quaternion.copy(mainCamera.quaternion);
   }
 
@@ -1153,23 +1152,23 @@ function startWebcamAR() {
     // Make layout containers transparent
     document.body.style.background = 'transparent';
     document.documentElement.style.background = 'transparent';
-    
+
     const appContainer = document.getElementById('app-container');
     if (appContainer) appContainer.style.background = 'transparent';
-    
+
     const vpContainer = document.getElementById('viewport-container');
     if (vpContainer) vpContainer.style.background = 'transparent';
 
     // Hide UI panels during AR mode
     const header = document.querySelector('header');
     if (header) header.style.display = 'none';
-    
+
     const arvrPanel = document.getElementById('arvr-panel');
     if (arvrPanel) arvrPanel.style.display = 'none';
-    
+
     const sidebar = document.getElementById('sidebar');
     if (sidebar) sidebar.style.display = 'none';
-    
+
     const interactionHud = document.getElementById('interaction-hud');
     if (interactionHud) interactionHud.style.display = 'none';
 
@@ -1232,7 +1231,7 @@ function stopWebcamAR() {
     }
     video.style.display = 'none';
   }
-  
+
   webcamARActive = false;
   document.body.classList.remove('ar-active');
   window.removeEventListener('deviceorientation', onDeviceOrientation, true);
@@ -1250,23 +1249,23 @@ function stopWebcamAR() {
   // Restore backgrounds
   document.body.style.background = '';
   document.documentElement.style.background = '';
-  
+
   const appContainer = document.getElementById('app-container');
   if (appContainer) appContainer.style.background = '';
-  
+
   const vpContainer = document.getElementById('viewport-container');
   if (vpContainer) vpContainer.style.background = '';
 
   // Restore UI elements
   const header = document.querySelector('header');
   if (header) header.style.display = '';
-  
+
   const arvrPanel = document.getElementById('arvr-panel');
   if (arvrPanel) arvrPanel.style.display = '';
-  
+
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.style.display = '';
-  
+
   const interactionHud = document.getElementById('interaction-hud');
   if (interactionHud) interactionHud.style.display = '';
 
@@ -1466,7 +1465,7 @@ function updateVRLocomotion(dt) {
     if (!source.gamepad || !source.gamepad.axes) return;
 
     const axes = source.gamepad.axes;
-    
+
     // WebXR standard gamepad thumbstick mappings:
     // Typically axes[2] is horizontal and axes[3] is vertical.
     // If the device maps the thumbstick to axes[0] and axes[1], we fallback.
@@ -1492,7 +1491,7 @@ function updateVRLocomotion(dt) {
     // Close panel if thumbstick click (buttons[3]) or B/Y button (buttons[5]) is pressed
     const buttons = source.gamepad.buttons;
     if (buttons && (
-      (buttons[3] && buttons[3].pressed) || 
+      (buttons[3] && buttons[3].pressed) ||
       (buttons[5] && buttons[5].pressed)
     )) {
       deselectAll();
@@ -1516,7 +1515,7 @@ function updateVRLocomotion(dt) {
           moveVector.addScaledVector(right, joystickX);
         }
       }
-    } 
+    }
     // RIGHT controller rotates the player rig (Turning / Looking around)
     else if (handedness === 'right') {
       const turnSpeed = 1.3; // Radians per second
@@ -1563,17 +1562,17 @@ function updateVRLocomotion(dt) {
 
 function onControllerSelect(controller) {
   if (!mainRenderer.xr.isPresenting) return;
-  
+
   const currentTime = new Date().getTime();
   const triggerLength = currentTime - lastTriggerTime;
-  
+
   // Double-pull the trigger within 350ms to close/dismiss the panel
   if (triggerLength < 350 && triggerLength > 0) {
     deselectAll();
     lastTriggerTime = 0; // reset
     return;
   }
-  
+
   lastTriggerTime = currentTime;
 
   // Perform Raycasting from the controller
@@ -1612,10 +1611,10 @@ function loadOperatingRoomModel() {
     './skeleton/charite_university_hospital_-_operating_room.glb',
     (gltf) => {
       operatingRoomGroup = gltf.scene;
-      
-      // Keep hidden by default; only show in VR mode
-      operatingRoomGroup.visible = false;
-      
+
+      // Keep visible by default for desktop immersion
+      operatingRoomGroup.visible = true;
+
       // Enable shadow receiving on meshes in the room
       operatingRoomGroup.traverse((child) => {
         if (child.isMesh) {
@@ -1623,10 +1622,18 @@ function loadOperatingRoomModel() {
           child.castShadow = true;
         }
       });
-      
+
       // Position the room model at the origin
       operatingRoomGroup.position.set(0, 0, 0);
       mainScene.add(operatingRoomGroup);
+      const box = new THREE.Box3().setFromObject(operatingRoomGroup);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      console.log("=== OPERATING ROOM DIMENSIONS ===");
+      console.log(`Size: x=${size.x.toFixed(4)}, y=${size.y.toFixed(4)}, z=${size.z.toFixed(4)}`);
+      console.log(`Center: x=${center.x.toFixed(4)}, y=${center.y.toFixed(4)}, z=${center.z.toFixed(4)}`);
+      console.log(`Min: x=${box.min.x.toFixed(4)}, y=${box.min.y.toFixed(4)}, z=${box.min.z.toFixed(4)}`);
+      console.log(`Max: x=${box.max.x.toFixed(4)}, y=${box.max.y.toFixed(4)}, z=${box.max.z.toFixed(4)}`);
       console.log("Operating room model loaded successfully.");
     },
     undefined,
@@ -1647,7 +1654,7 @@ function showVRInfoPanel(bone, key) {
   // Build canvas texture
   var CW = 1024, CH = 768;
   var canvas = document.createElement('canvas');
-  canvas.width  = CW;
+  canvas.width = CW;
   canvas.height = CH;
   var ctx = canvas.getContext('2d');
 
@@ -1728,7 +1735,7 @@ function showVRInfoPanel(bone, key) {
 
   // Build 3D panel mesh
   var panelGeom = new THREE.PlaneGeometry(1.3, 0.975);
-  var panelMat  = new THREE.MeshBasicMaterial({
+  var panelMat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
     side: THREE.DoubleSide,
@@ -1752,7 +1759,7 @@ function showVRInfoPanel(bone, key) {
     });
     bonePreviewMesh = new THREE.Mesh(slicedGeom, previewMat);
     bonePreviewMesh.rotation.x = -Math.PI / 2;
-    var previewBox  = new THREE.Box3().setFromObject(bonePreviewMesh);
+    var previewBox = new THREE.Box3().setFromObject(bonePreviewMesh);
     var previewSize = previewBox.getSize(new THREE.Vector3());
     var maxDim = Math.max(previewSize.x, previewSize.y, previewSize.z);
     var previewScale = 0.38 / (maxDim || 1);
@@ -1762,7 +1769,7 @@ function showVRInfoPanel(bone, key) {
 
   // Build CLOSE button
   var btnCanvas = document.createElement('canvas');
-  btnCanvas.width  = 256;
+  btnCanvas.width = 256;
   btnCanvas.height = 96;
   var bCtx = btnCanvas.getContext('2d');
   bCtx.fillStyle = 'rgba(220, 38, 38, 0.92)';
@@ -1784,7 +1791,7 @@ function showVRInfoPanel(bone, key) {
   bCtx.fillText('X  CLOSE', 128, 48);
   var btnTexture = new THREE.CanvasTexture(btnCanvas);
   var btnGeom = new THREE.PlaneGeometry(0.32, 0.12);
-  var btnMat  = new THREE.MeshBasicMaterial({
+  var btnMat = new THREE.MeshBasicMaterial({
     map: btnTexture,
     transparent: true,
     side: THREE.DoubleSide,
@@ -1814,7 +1821,7 @@ function showVRInfoPanel(bone, key) {
 
 function hideVRInfoPanel() {
   if (vrInfoPanel) {
-    vrInfoPanel.traverse(function(child) {
+    vrInfoPanel.traverse(function (child) {
       if (child.isMesh) {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
@@ -1846,7 +1853,7 @@ function vrPanelWrapText(ctx, text, x, y, maxWidth, lineHeight) {
   var line = '';
   for (var i = 0; i < words.length; i++) {
     var testLine = line + words[i] + ' ';
-    var metrics  = ctx.measureText(testLine);
+    var metrics = ctx.measureText(testLine);
     if (metrics.width > maxWidth && i > 0) {
       ctx.fillText(line, x, y);
       line = words[i] + ' ';
@@ -1893,7 +1900,7 @@ function loadSkeletonStand() {
     './skeleton/IVPole.glb',
     (gltf) => {
       skeletonStandGroup = gltf.scene;
-      
+
       // Compute and log dimensions
       const box = new THREE.Box3().setFromObject(skeletonStandGroup);
       const size = box.getSize(new THREE.Vector3());
@@ -1903,7 +1910,7 @@ function loadSkeletonStand() {
       console.log(`Center: x=${center.x.toFixed(4)}, y=${center.y.toFixed(4)}, z=${center.z.toFixed(4)}`);
       console.log(`Min: x=${box.min.x.toFixed(4)}, y=${box.min.y.toFixed(4)}, z=${box.min.z.toFixed(4)}`);
       console.log(`Max: x=${box.max.x.toFixed(4)}, y=${box.max.y.toFixed(4)}, z=${box.max.z.toFixed(4)}`);
-      
+
       skeletonStandGroup.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
@@ -1913,7 +1920,7 @@ function loadSkeletonStand() {
           console.log(`Mesh: ${child.name} | Center: x=${childCenter.x.toFixed(4)}, y=${childCenter.y.toFixed(4)}, z=${childCenter.z.toFixed(4)}`);
         }
       });
-      
+
       if (skeletonGroup) {
         attachStandToSkeleton();
       }
@@ -1931,17 +1938,17 @@ function attachStandToSkeleton() {
 
   const STAND_SCALE = 0.151;
   const localScale = STAND_SCALE / SCALE_FACTOR; // 0.151 / 0.11 ≈ 1.3727
-  
+
   skeletonStandGroup.scale.set(localScale, localScale, localScale);
-  
+
   // Align Hook1 (local x=-0.0145, y=12.2649, z=0.7102 in stand space)
   // to hang exactly over skeleton origin (local x=0, y=16.65, z=0 in skeletonGroup space)
   const standLocalX = 0.0145 * localScale;
   const standLocalZ = -0.7102 * localScale;
   const standLocalY = -8.1475; // sets stand base on the floor (Y = 0 in world)
-  
+
   skeletonStandGroup.position.set(standLocalX, standLocalY, standLocalZ);
-  
+
   skeletonGroup.add(skeletonStandGroup);
 
   // Add a small metallic hanging rod connecting skull to the stand's hook
