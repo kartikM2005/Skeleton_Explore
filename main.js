@@ -1001,6 +1001,11 @@ async function startXRSession(mode) {
       skeletonGroup.position.set(1.0, skeletonBottomOffset, -1.2);
       skeletonGroup.rotation.set(0, 0, 0);
       skeletonGroup.updateMatrixWorld(true);
+
+      // Start player rig directly in front of the skeleton (facing it along Z)
+      if (dolly) {
+        dolly.position.set(1.0, 0, 0.2);
+      }
     }
 
     showXRMessage(`Entered XR Session. Put on your device!`);
