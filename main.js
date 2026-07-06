@@ -1950,22 +1950,22 @@ function attachStandToSkeleton() {
   // to hang exactly over skeleton origin (local x=0, y=16.65, z=0 in skeletonGroup space)
   const standLocalX = 0.0145 * localScale;
   const standLocalZ = -0.7102 * localScale;
-  const standLocalY = -8.1475; // sets stand base on the floor (Y = 0 in world)
+  const standLocalY = -8.35; // sets stand base slightly below the floor to prevent floating
 
   skeletonStandGroup.position.set(standLocalX, standLocalY, standLocalZ);
 
   skeletonGroup.add(skeletonStandGroup);
 
   // Add a small metallic hanging rod connecting skull to the stand's hook
-  // top of head is at local Y ≈ 15.88, hook is at local Y ≈ 16.68
-  const rodGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8);
+  // top of head is at local Y ≈ 7.88, hook is at local Y ≈ 8.48
+  const rodGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8);
   const rodMaterial = new THREE.MeshStandardMaterial({
     color: 0xcccccc,
     roughness: 0.2,
     metalness: 0.8
   });
   const rodMesh = new THREE.Mesh(rodGeometry, rodMaterial);
-  rodMesh.position.set(0, 16.28, 0);
+  rodMesh.position.set(0, 8.18, 0);
   skeletonGroup.add(rodMesh);
 
   console.log("Skeleton stand successfully attached to the skeleton group.");
