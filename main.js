@@ -1508,11 +1508,14 @@ function updateVRLocomotion(dt) {
       if (Math.abs(joystickX) > 0 || Math.abs(joystickY) > 0) {
         const controller = mainRenderer.xr.getController(index);
         if (controller) {
-          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion);
+          const controllerQuaternion = new THREE.Quaternion();
+          controller.getWorldQuaternion(controllerQuaternion);
+
+          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(controllerQuaternion);
           forward.y = 0;
           forward.normalize();
 
-          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(controller.quaternion);
+          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(controllerQuaternion);
           right.y = 0;
           right.normalize();
 
