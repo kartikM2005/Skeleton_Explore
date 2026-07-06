@@ -1647,9 +1647,11 @@ function updateVRLocomotion(dt) {
   }
 
   // Headset-to-Dolly boundary locking (forces player view inside walls when physically walking)
-  if (xrCamera) {
+  if (mainCamera) {
+    // Force matrix update on the active scene camera to get fresh world position
+    mainCamera.updateMatrixWorld(true);
     const headsetWorldPos = new THREE.Vector3();
-    xrCamera.getWorldPosition(headsetWorldPos);
+    mainCamera.getWorldPosition(headsetWorldPos);
 
     const minX = -6.5;
     const maxX = 6.5;
