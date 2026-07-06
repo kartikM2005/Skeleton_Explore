@@ -998,7 +998,7 @@ async function startXRSession(mode) {
       }
 
       // Position the skeleton standing in the large empty space of the VR room
-      skeletonGroup.position.set(-2.0, skeletonBottomOffset, 1.0);
+      skeletonGroup.position.set(0.0, skeletonBottomOffset, -1.5);
       skeletonGroup.rotation.set(0, 0, 0);
       skeletonGroup.updateMatrixWorld(true);
     }
