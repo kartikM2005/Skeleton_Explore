@@ -1609,14 +1609,41 @@ function updateVRLocomotion(dt) {
     }
   });
 
-  // Apply movement to the container (dolly)
+  // Apply movement to the container (dolly) with collision detection
   if (moveVector.lengthSq() > 0) {
     moveVector.normalize().multiplyScalar(speed * dt);
+
+    // Bounding cylindrical collider centered at skeleton (1.0, -1.2) with radius 0.6
+    const candidateX = dolly.position.x + moveVector.x;
+    const candidateZ = dolly.position.z + moveVector.z;
+    const obsX = 1.0;
+    const obsZ = -1.2;
+    const obsRadius = 0.6; // Collide with skeleton base and stand
+
+    const dx = candidateX - obsX;
+    const dz = candidateZ - obsZ;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist < obsRadius && dist > 0.001) {
+      // Collision! Slide along the perimeter of the cylinder
+      const normalX = dx / dist;
+      const normalZ = dz / dist;
+
+      // Project moveVector onto the normal
+      const dot = moveVector.x * normalX + moveVector.z * normalZ;
+
+      if (dot < 0) {
+        // Subtract the normal component to slide
+        moveVector.x -= dot * normalX;
+        moveVector.z -= dot * normalZ;
+      }
+    }
+
     dolly.position.add(moveVector);
 
-    // Room boundaries (keep user inside the lab floor space)
-    dolly.position.x = Math.max(-20, Math.min(20, dolly.position.x));
-    dolly.position.z = Math.max(-20, Math.min(20, dolly.position.z));
+    // Room boundaries (keep user inside the lab floor space, clamped to physical walls)
+    dolly.position.x = Math.max(-6.5, Math.min(6.5, dolly.position.x));
+    dolly.position.z = Math.max(-6.5, Math.min(6.5, dolly.position.z));
   }
 }
 
