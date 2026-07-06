@@ -1645,6 +1645,29 @@ function updateVRLocomotion(dt) {
     dolly.position.x = Math.max(-6.5, Math.min(6.5, dolly.position.x));
     dolly.position.z = Math.max(-6.5, Math.min(6.5, dolly.position.z));
   }
+
+  // Headset-to-Dolly boundary locking (forces player view inside walls when physically walking)
+  if (xrCamera) {
+    const headsetWorldPos = new THREE.Vector3();
+    xrCamera.getWorldPosition(headsetWorldPos);
+
+    const minX = -6.5;
+    const maxX = 6.5;
+    const minZ = -6.5;
+    const maxZ = 6.5;
+
+    if (headsetWorldPos.x < minX) {
+      dolly.position.x += (minX - headsetWorldPos.x);
+    } else if (headsetWorldPos.x > maxX) {
+      dolly.position.x += (maxX - headsetWorldPos.x);
+    }
+
+    if (headsetWorldPos.z < minZ) {
+      dolly.position.z += (minZ - headsetWorldPos.z);
+    } else if (headsetWorldPos.z > maxZ) {
+      dolly.position.z += (maxZ - headsetWorldPos.z);
+    }
+  }
 }
 
 
