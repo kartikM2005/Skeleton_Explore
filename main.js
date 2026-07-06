@@ -175,12 +175,10 @@ function setupMainScene() {
   // 6DoF Controllers Setup for Zapbox / VR inputs
   controller1 = mainRenderer.xr.getController(0);
   controller1.addEventListener('selectstart', () => onControllerSelect(controller1));
-  controller1.addEventListener('squeezestart', deselectAll);
   cameraPitchGroup.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
   controller2.addEventListener('selectstart', () => onControllerSelect(controller2));
-  controller2.addEventListener('squeezestart', deselectAll);
   cameraPitchGroup.add(controller2);
 
   // Controller Grip models setup
@@ -1523,17 +1521,7 @@ function updateVRLocomotion(dt) {
       if (aPressed && !window[keyA]) {
         window[keyA] = true;
         if (handedness === 'right') {
-          deselectAll(); // Right A closes the panel
-        }
-      } else if (!aPressed) {
-        window[keyA] = false;
-      }
-
-      // B/Y Button click (edge triggered)
-      if (bPressed && !window[keyB]) {
-        window[keyB] = true;
-        if (handedness === 'right') {
-          // Right B opens the panel for the pointed-at bone
+          // Right A opens the panel for the pointed-at bone
           const controller = mainRenderer.xr.getController(index);
           if (controller) {
             tempMatrix.identity().extractRotation(controller.matrixWorld);
@@ -1552,8 +1540,16 @@ function updateVRLocomotion(dt) {
               }
             }
           }
-        } else {
-          deselectAll(); // Left Y closes the panel
+        }
+      } else if (!aPressed) {
+        window[keyA] = false;
+      }
+
+      // B/Y Button click (edge triggered)
+      if (bPressed && !window[keyB]) {
+        window[keyB] = true;
+        if (handedness === 'right') {
+          deselectAll(); // Right B closes the panel
         }
       } else if (!bPressed) {
         window[keyB] = false;
