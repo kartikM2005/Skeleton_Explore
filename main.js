@@ -51,6 +51,7 @@ let operatingRoomGroup = null; // Group containing the GLB scene
 let operatingRoomBox = null;
 let roomColliders = [];
 let visualWalls = [];
+let labShelfGroup = null; // Group containing the GLB lab shelf
 
 // Visual room boundaries matching the visual walls and windows of Room_updated.glb
 const ROOM_LIMITS = {
@@ -93,6 +94,21 @@ function init() {
     loadOperatingRoomModel(); // Start loading the operating room in the background
     setupEventListeners();
     animate();
+
+    // Add App Version HUD element to easily verify cache refresh
+    const versionDiv = document.createElement('div');
+    versionDiv.style.position = 'fixed';
+    versionDiv.style.bottom = '10px';
+    versionDiv.style.right = '10px';
+    versionDiv.style.background = 'rgba(0,0,0,0.8)';
+    versionDiv.style.color = '#ff8800';
+    versionDiv.style.padding = '5px 10px';
+    versionDiv.style.fontFamily = 'monospace';
+    versionDiv.style.fontSize = '12px';
+    versionDiv.style.borderRadius = '4px';
+    versionDiv.style.zIndex = '9999';
+    versionDiv.innerText = 'App Version: v68';
+    document.body.appendChild(versionDiv);
   } catch (error) {
     console.error("Initialization error (likely WebGL disabled/unsupported):", error);
     if (loadingText) {
@@ -1011,6 +1027,7 @@ async function startXRSession(mode) {
 
       if (operatingRoomGroup) {
         operatingRoomGroup.visible = true;
+        setTimeout(debugSceneTree, 1000); // Debug scene tree after 1s
       }
 
       // Position the skeleton standing in the large empty space of the VR room
@@ -1756,6 +1773,9 @@ function loadOperatingRoomModel() {
       // Generate visual boundary walls colored orange/brown
       createVisualColliderWalls();
 
+      // Load additional room props (e.g. lab shelf)
+      loadLabShelf();
+
       console.log("Operating room model (Room_updated.glb) loaded successfully.");
     },
     undefined,
@@ -1832,6 +1852,139 @@ function createVisualColliderWalls() {
   backWall.visible = false;
   operatingRoomGroup.add(backWall);
   visualWalls.push(backWall);
+}
+
+// 11.5 Load and Position Lab Cabinet Shelf
+function loadLabShelf() {
+  const loader = new GLTFLoader();
+  loader.load(
+    './skeleton/updated_shelf.glb?v=1',
+    (gltf) => {
+      labShelfGroup = gltf.scene;
+
+      // Enable shadows
+      labShelfGroup.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      // Scale to convert GLTF meter units to desired size (1.1 scale gives height ~1.98m, width ~1.63m, depth ~1.04m)
+      const scale = 1.1;
+      labShelfGroup.scale.set(scale, scale, scale);
+
+      // Debug: Log Three.js computed bounds
+      labShelfGroup.updateMatrixWorld(true);
+      const shelfBox = new THREE.Box3().setFromObject(labShelfGroup);
+      const shelfSize = shelfBox.getSize(new THREE.Vector3());
+      const shelfCenter = shelfBox.getCenter(new THREE.Vector3());
+      console.log("=== THREE.JS SHELF BOUNDS ===");
+      console.log(`Scale: ${scale}`);
+      console.log(`Size: x=${shelfSize.x.toFixed(4)}, y=${shelfSize.y.toFixed(4)}, z=${shelfSize.z.toFixed(4)}`);
+      console.log(`Center: x=${shelfCenter.x.toFixed(4)}, y=${shelfCenter.y.toFixed(4)}, z=${shelfCenter.z.toFixed(4)}`);
+      console.log(`Min: x=${shelfBox.min.x.toFixed(4)}, y=${shelfBox.min.y.toFixed(4)}, z=${shelfBox.min.z.toFixed(4)}`);
+      console.log(`Max: x=${shelfBox.max.x.toFixed(4)}, y=${shelfBox.max.y.toFixed(4)}, z=${shelfBox.max.z.toFixed(4)}`);
+
+      // Z positioning: Place in the empty corner space next to the orange wall (z = -1.5)
+      const zPos = 2.8;
+
+      // X positioning: Place flush against the left white wall (xMin = -3.03)
+      const xPos = 0;
+
+      // Y positioning: Rest bottom of shelf on the floor (Y = 0)
+      const yPos = 0.0;
+
+      labShelfGroup.position.set(xPos, yPos, zPos);
+      labShelfGroup.rotation.set(0, Math.PI, 0); // Rotate 90 degrees anticlockwise to face -Z
+
+      // Add to operatingRoomGroup so it shows only in VR mode
+      if (operatingRoomGroup) {
+        operatingRoomGroup.add(labShelfGroup);
+      }
+
+      // Load all individual bone models and place them on the cabinet shelves
+      loadCabinetBones();
+
+      console.log("Lab shelf model loaded successfully.");
+    },
+    undefined,
+    (error) => {
+      console.error("Error loading lab shelf:", error);
+    }
+  );
+}
+
+// 11.6 Load and position bone models on cabinet shelves
+function loadCabinetBones() {
+  const bones = [
+    // Shelf 4: Top Shelf (y = 1.50m)
+    { name: 'Skull', file: 'human_male_skull.glb', scale: 0.01, localX: -0.35, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
+
+    // Shelf 3: Upper-Middle Shelf (y = 1.05m)
+    { name: 'Vertebrae', file: 'human_vertebrae.glb', scale: 0.008, localX: 0.0, localY: 1.05, localZ: 0.0, rotateX: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
+    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.35, localY: 1.05, localZ: 0.0, rotateY: Math.PI },
+
+    // Shelf 2: Lower-Middle Shelf (y = 0.60m)
+    { name: 'Tibia', file: 'human_tibia.glb', scale: 0.001, localX: -0.3, localY: 0.60, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
+    { name: 'Humerus', file: 'human_humerous.glb', scale: 0.001, localX: 0.3, localY: 0.60, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
+
+    // Shelf 1: Bottom Shelf (y = 0.15m)
+    { name: 'Scapula', file: 'human_scapula.glb', scale: 0.004, localX: -0.4, localY: 0.15, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Sternum', file: 'human_sternum.glb', scale: 0.1, localX: 0.0, localY: 0.15, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Patella', file: 'human_patella.glb', scale: 0.001, localX: 0.4, localY: 0.15, localZ: 0.0, rotateY: Math.PI }
+  ];
+
+  const loader = new GLTFLoader();
+  bones.forEach(bone => {
+    loader.load(
+      `./skeleton/${bone.file}?v=1`,
+      (gltf) => {
+        const boneGroup = new THREE.Group();
+
+        // Enable shadows and handle materials
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        // Set scaling
+        gltf.scene.scale.set(bone.scale, bone.scale, bone.scale);
+
+        // Update matrices to get correct dimensions
+        gltf.scene.updateMatrixWorld(true);
+
+        // Compute boundaries in Three.js
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const center = box.getCenter(new THREE.Vector3());
+
+        // Center X and Z, and ground Y (bottom of mesh at Y=0 relative to boneGroup)
+        gltf.scene.position.set(-center.x, -box.min.y, -center.z);
+        boneGroup.add(gltf.scene);
+
+        // Position group relative to cabinet origin
+        boneGroup.position.set(bone.localX, bone.localY, bone.localZ);
+
+        // Apply optional rotations
+        if (bone.rotateX) boneGroup.rotation.x = bone.rotateX;
+        if (bone.rotateY) boneGroup.rotation.y = bone.rotateY;
+        if (bone.rotateZ) boneGroup.rotation.z = bone.rotateZ;
+
+        // Add directly as a child of the cabinet so it moves/rotates with it
+        if (labShelfGroup) {
+          labShelfGroup.add(boneGroup);
+        }
+        console.log(`Bone model ${bone.name} successfully placed inside cabinet shelf.`);
+      },
+      undefined,
+      (error) => {
+        console.error(`Error loading bone model ${bone.name}:`, error);
+      }
+    );
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2161,5 +2314,16 @@ function attachStandToSkeleton() {
   }
 
   console.log("Skeleton stand successfully attached to the skeleton group.");
+}
+
+function debugSceneTree() {
+  console.log("=== THREE.JS SCENE TREE DEBUG ===");
+  mainScene.traverse((child) => {
+    if (child.isMesh || child.name.includes("Group") || child.name.includes("room") || child.name.includes("shelf") || child.name.includes("cabinet")) {
+      const worldPos = new THREE.Vector3();
+      child.getWorldPosition(worldPos);
+      console.log(`Node: ${child.name} | Type: ${child.type} | Visible: ${child.visible} | Pos: [${child.position.x.toFixed(2)}, ${child.position.y.toFixed(2)}, ${child.position.z.toFixed(2)}] | WorldPos: [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}] | Scale: [${child.scale.x.toFixed(4)}, ${child.scale.y.toFixed(4)}, ${child.scale.z.toFixed(4)}]`);
+    }
+  });
 }
 
