@@ -1919,11 +1919,11 @@ function loadLabShelf() {
 function loadCabinetBones() {
   const bones = [
     // Shelf 4: Top Shelf (y = 1.50m)
-    { name: 'Skull', file: 'human_male_skull.glb', scale: 0.01, localX: -0.35, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
-    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: 0.0, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 3: Upper-Middle Shelf (y = 1.05m)
-    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.35, localY: 1.05, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Skull', file: 'human_male_skull.glb', scale: 0.01, localX: -0.35, localY: 1.05, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.05, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.60m)
     { name: 'Tibia', file: 'human_tibia.glb', scale: 0.001, localX: -0.3, localY: 0.60, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
