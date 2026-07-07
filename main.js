@@ -47,7 +47,18 @@ let cameraPitchGroup = null; // Intermediate group for looking up/down
 let controller1 = null, controller2 = null; // 6DoF WebXR controllers (for Zapbox)
 let controllerGrip1 = null, controllerGrip2 = null; // Visual models for controller grips
 const clock = new THREE.Clock(); // Locomotion delta time tracker
-let operatingRoomGroup = null; // 3D Operating Room model for VR mode
+let operatingRoomGroup = null; // Group containing the GLB scene
+let operatingRoomBox = null;
+let roomColliders = [];
+let visualWalls = [];
+
+// Visual room boundaries matching the visual walls and windows of Room_updated.glb
+const ROOM_LIMITS = {
+  minX: -3.03,
+  maxX: 2.83,
+  minZ: -2.5,
+  maxZ: 2.5
+};
 let vrInfoPanel = null;   // Holographic info panel rendered inside VR world
 let vrBonePreview = null; // Isolated bone geometry floating inside VR world
 let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
@@ -1583,18 +1594,19 @@ function updateVRLocomotion(dt) {
 
       // Horizontal Turning (Yaw)
       if (Math.abs(joystickX) > 0) {
-        // Pivot around the active XR camera's current position (preventing the swing effect)
-        xrCamera.updateMatrixWorld(true);
+        // Pivot around the active scene camera's current position (preventing the swing effect)
+        mainCamera.updateMatrixWorld(true);
         const headsetWorldPos = new THREE.Vector3();
-        xrCamera.getWorldPosition(headsetWorldPos);
+        mainCamera.getWorldPosition(headsetWorldPos);
 
         // Apply rotation to the dolly
         dolly.rotation.y -= joystickX * turnSpeed * dt;
         dolly.updateMatrixWorld(true);
+        mainCamera.updateMatrixWorld(true);
 
-        // Get active XR camera's new world position and correct dolly shift
+        // Get active camera's new world position and correct dolly shift
         const newHeadsetWorldPos = new THREE.Vector3();
-        xrCamera.getWorldPosition(newHeadsetWorldPos);
+        mainCamera.getWorldPosition(newHeadsetWorldPos);
 
         const shift = new THREE.Vector3().subVectors(headsetWorldPos, newHeadsetWorldPos);
         dolly.position.add(shift);
@@ -1640,34 +1652,33 @@ function updateVRLocomotion(dt) {
     }
 
     dolly.position.add(moveVector);
-
-    // Room boundaries (keep user inside the lab floor space, clamped to physical walls)
-    dolly.position.x = Math.max(-6.5, Math.min(6.5, dolly.position.x));
-    dolly.position.z = Math.max(-6.5, Math.min(6.5, dolly.position.z));
   }
 
-  // Headset-to-Dolly boundary locking (forces player view inside walls when physically walking)
+  // Enforce room boundaries on the headset's world position (capsule collider)
   if (mainCamera) {
     // Force matrix update on the active scene camera to get fresh world position
     mainCamera.updateMatrixWorld(true);
     const headsetWorldPos = new THREE.Vector3();
     mainCamera.getWorldPosition(headsetWorldPos);
 
-    const minX = -6.5;
-    const maxX = 6.5;
-    const minZ = -6.5;
-    const maxZ = 6.5;
+    // Read visual room boundaries from ROOM_LIMITS and shrink by player capsule radius
+    const PLAYER_RADIUS = 0.4;
+    const minX = ROOM_LIMITS.minX + PLAYER_RADIUS;
+    const maxX = ROOM_LIMITS.maxX - PLAYER_RADIUS;
+    const minZ = ROOM_LIMITS.minZ + PLAYER_RADIUS;
+    const maxZ = ROOM_LIMITS.maxZ - PLAYER_RADIUS;
 
-    if (headsetWorldPos.x < minX) {
-      dolly.position.x += (minX - headsetWorldPos.x);
-    } else if (headsetWorldPos.x > maxX) {
-      dolly.position.x += (maxX - headsetWorldPos.x);
+    const clampedX = Math.max(minX, Math.min(maxX, headsetWorldPos.x));
+    const clampedZ = Math.max(minZ, Math.min(maxZ, headsetWorldPos.z));
+
+    const shiftX = clampedX - headsetWorldPos.x;
+    const shiftZ = clampedZ - headsetWorldPos.z;
+
+    if (Math.abs(shiftX) > 0.001) {
+      dolly.position.x += shiftX;
     }
-
-    if (headsetWorldPos.z < minZ) {
-      dolly.position.z += (minZ - headsetWorldPos.z);
-    } else if (headsetWorldPos.z > maxZ) {
-      dolly.position.z += (maxZ - headsetWorldPos.z);
+    if (Math.abs(shiftZ) > 0.001) {
+      dolly.position.z += shiftZ;
     }
   }
 }
@@ -1721,39 +1732,106 @@ function onControllerSelect(controller) {
 function loadOperatingRoomModel() {
   const loader = new GLTFLoader();
   loader.load(
-    './skeleton/charite_university_hospital_-_operating_room.glb?v=48',
+    './skeleton/Room_updated.glb?v=57',
     (gltf) => {
       operatingRoomGroup = gltf.scene;
 
       // Keep hidden by default; only show in VR mode
       operatingRoomGroup.visible = false;
 
-      // Enable shadow receiving on meshes in the room
+      // Enable shadow receiving on meshes in the room and cache colliders
+      roomColliders = [];
       operatingRoomGroup.traverse((child) => {
         if (child.isMesh) {
           child.receiveShadow = true;
           child.castShadow = true;
+          roomColliders.push(child);
         }
       });
 
       // Position the room model at the origin
       operatingRoomGroup.position.set(0, 0, 0);
       mainScene.add(operatingRoomGroup);
-      const box = new THREE.Box3().setFromObject(operatingRoomGroup);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      console.log("=== OPERATING ROOM DIMENSIONS ===");
-      console.log(`Size: x=${size.x.toFixed(4)}, y=${size.y.toFixed(4)}, z=${size.z.toFixed(4)}`);
-      console.log(`Center: x=${center.x.toFixed(4)}, y=${center.y.toFixed(4)}, z=${center.z.toFixed(4)}`);
-      console.log(`Min: x=${box.min.x.toFixed(4)}, y=${box.min.y.toFixed(4)}, z=${box.min.z.toFixed(4)}`);
-      console.log(`Max: x=${box.max.x.toFixed(4)}, y=${box.max.y.toFixed(4)}, z=${box.max.z.toFixed(4)}`);
-      console.log("Operating room model loaded successfully.");
+
+      // Generate visual boundary walls colored orange/brown
+      createVisualColliderWalls();
+
+      console.log("Operating room model (Room_updated.glb) loaded successfully.");
     },
     undefined,
     (error) => {
       console.error('Error loading operating room model:', error);
     }
   );
+}
+
+// Helper to create visual chaperone/guardian walls colored orange/brown (#814913) at ROOM_LIMITS
+function createVisualColliderWalls() {
+  // Clear any existing visual walls
+  visualWalls.forEach(wall => {
+    if (wall.parent) wall.parent.remove(wall);
+    wall.geometry.dispose();
+    wall.material.dispose();
+  });
+  visualWalls = [];
+
+  if (!operatingRoomGroup) return;
+
+  const color = 0x814913; // Dark orange/brown from user image
+  const opacity = 0.35;   // Semi-transparent
+  const height = 3.0;     // Height of visual walls
+  const yPos = 1.5;       // Center Y position
+
+  const xMin = ROOM_LIMITS.minX;
+  const xMax = ROOM_LIMITS.maxX;
+  const zMin = ROOM_LIMITS.minZ;
+  const zMax = ROOM_LIMITS.maxZ;
+
+  const xSize = xMax - xMin;
+  const zSize = zMax - zMin;
+
+  // Visual material
+  const material = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: opacity,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  // 1. Left Wall (at xMin)
+  const leftGeo = new THREE.PlaneGeometry(zSize, height);
+  const leftWall = new THREE.Mesh(leftGeo, material);
+  leftWall.rotation.y = Math.PI / 2;
+  leftWall.position.set(xMin, yPos, (zMin + zMax) / 2);
+  leftWall.visible = false;
+  operatingRoomGroup.add(leftWall);
+  visualWalls.push(leftWall);
+
+  // 2. Right Wall (at xMax)
+  const rightGeo = new THREE.PlaneGeometry(zSize, height);
+  const rightWall = new THREE.Mesh(rightGeo, material);
+  rightWall.rotation.y = Math.PI / 2;
+  rightWall.position.set(xMax, yPos, (zMin + zMax) / 2);
+  rightWall.visible = false;
+  operatingRoomGroup.add(rightWall);
+  visualWalls.push(rightWall);
+
+  // 3. Front Wall (at zMin)
+  const frontGeo = new THREE.PlaneGeometry(xSize, height);
+  const frontWall = new THREE.Mesh(frontGeo, material);
+  frontWall.position.set((xMin + xMax) / 2, yPos, zMin);
+  frontWall.visible = false;
+  operatingRoomGroup.add(frontWall);
+  visualWalls.push(frontWall);
+
+  // 4. Back Wall (at zMax)
+  const backGeo = new THREE.PlaneGeometry(xSize, height);
+  const backWall = new THREE.Mesh(backGeo, material);
+  backWall.position.set((xMin + xMax) / 2, yPos, zMax);
+  backWall.visible = false;
+  operatingRoomGroup.add(backWall);
+  visualWalls.push(backWall);
 }
 
 // ─────────────────────────────────────────────────────────────
