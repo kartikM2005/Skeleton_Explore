@@ -1922,8 +1922,8 @@ function loadCabinetBones() {
     { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: 0.0, localY: 1.4, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 3: Upper-Middle Shelf (y = 1.05m)
-    { name: 'Skull', file: 'skull_downloadable.glb', scale: 0.1, localX: -0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI },
-    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.07, localZ: 0.0, rotateY: Math.PI },
+    { name: 'Skull', file: 'skull_downloadable.glb', scale: 0.1, localX: -0.35, localY: 1.15, localZ: 0.0, rotateY: Math.PI * 2 },
+    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.60m)
     { name: 'Tibia', file: 'human_tibia.glb', scale: 0.001, localX: -0.3, localY: 0.56, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
@@ -1972,11 +1972,17 @@ function loadCabinetBones() {
         if (bone.rotateY) boneGroup.rotation.y = bone.rotateY;
         if (bone.rotateZ) boneGroup.rotation.z = bone.rotateZ;
 
+        // Add 3D label sprite just above the model
+        const sizeY = box.max.y - box.min.y; // Height of the scaled model
+        const labelY = sizeY + 0.08; // 8 cm above the top of the bone model
+        const labelSprite = create3DLabel(bone.name, labelY);
+        boneGroup.add(labelSprite);
+
         // Add directly as a child of the cabinet so it moves/rotates with it
         if (labShelfGroup) {
           labShelfGroup.add(boneGroup);
         }
-        console.log(`Bone model ${bone.name} successfully placed inside cabinet shelf.`);
+        console.log(`Bone model ${bone.name} successfully placed inside cabinet shelf with label.`);
       },
       undefined,
       (error) => {
@@ -1984,6 +1990,66 @@ function loadCabinetBones() {
       }
     );
   });
+}
+
+// Helper to create a custom 3D Canvas Sprite Label that billboards in VR
+function create3DLabel(text, heightOffset) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 512;
+  canvas.height = 128;
+
+  // Clear background
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background panel: rounded rect
+  ctx.fillStyle = 'rgba(7, 8, 32, 0.85)';
+  ctx.strokeStyle = '#00f2fe';
+  ctx.lineWidth = 4;
+  
+  const x = 4, y = 4, w = canvas.width - 8, h = canvas.height - 8, r = 20;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Draw bone name text
+  ctx.font = 'bold 50px Arial';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#00f2fe';
+  ctx.shadowBlur = 10;
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  // Create canvas texture
+  const texture = new THREE.CanvasTexture(canvas);
+  const spriteMaterial = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true
+  });
+
+  const sprite = new THREE.Sprite(spriteMaterial);
+  sprite.scale.set(0.4, 0.1, 1.0); // 40 cm wide, 10 cm high
+  sprite.position.set(0, heightOffset, 0);
+
+  return sprite;
 }
 
 // ─────────────────────────────────────────────────────────────
