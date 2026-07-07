@@ -1919,7 +1919,7 @@ function loadLabShelf() {
 function loadCabinetBones() {
   const bones = [
     // Shelf 4: Top Shelf (y = 1.43m - 1.45m)
-    { name: 'Scapula', file: 'human_scapula.glb', scale: 0.004, localX: -0.4, localY: 1.43, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 1.50, labelZ: 0.15 },
+    { name: 'Scapula', file: 'human_scapula.glb', scale: 0.004, localX: -0.4, localY: 1.43, localZ: 0.0, rotateY: Math.PI, labelX: -0.15, labelY: 1.50, labelZ: 0.15 },
     { name: 'Patella', file: 'human_patella.glb', scale: 0.001, localX: 0.4, localY: 1.45, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 1.50, labelZ: 0.25 },
 
     // Shelf 3: Upper-Middle Shelf (y = 1.10m - 1.15m)
