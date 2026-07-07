@@ -1923,7 +1923,7 @@ function loadCabinetBones() {
     { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.50, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 3: Upper-Middle Shelf (y = 1.05m)
-    { name: 'Vertebrae', file: 'human_vertebrae.glb', scale: 0.008, localX: 0.0, localY: 1.05, localZ: 0.0, rotateX: Math.PI / 2, rotateY: 0 }, // lie flat along depth
+    { name: 'Vertebrae', file: 'human_vertebrae.glb', scale: 0.008, localX: 0.0, localY: 1.05, localZ: 0.0, rotateX: Math.PI / 2, rotateY: Math.PI / 2 }, // lie flat along width
     { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.35, localY: 1.05, localZ: 0.0, rotateY: Math.PI },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.60m)
