@@ -1924,7 +1924,7 @@ function loadCabinetBones() {
 
     // Shelf 3: Upper-Middle Shelf (y = 1.10m - 1.15m)
     { name: 'Skull', file: 'skull_downloadable.glb', scale: 0.1, localX: -0.35, localY: 1.15, localZ: 0.0, rotateY: Math.PI * 2, labelX: -0.06, labelY: 1.18, labelZ: 0.15 },
-    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 1.18, labelZ: 0.25 },
+    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI, labelX: 0.15, labelY: 1.18, labelZ: 0.25 },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.72m - 0.80m)
     { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.3, localY: 0.72, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 0.82, labelZ: 0.15 },
