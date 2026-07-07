@@ -1919,20 +1919,20 @@ function loadLabShelf() {
 function loadCabinetBones() {
   const bones = [
     // Shelf 4: Top Shelf (y = 1.43m - 1.45m)
-    { name: 'Scapula', file: 'human_scapula.glb', scale: 0.004, localX: -0.4, localY: 1.43, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 1.56, labelZ: 0.15 },
-    { name: 'Patella', file: 'human_patella.glb', scale: 0.001, localX: 0.4, localY: 1.45, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 1.30, labelZ: 0.25 },
+    { name: 'Scapula', file: 'human_scapula.glb', scale: 0.004, localX: -0.4, localY: 1.43, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 1.50, labelZ: 0.15 },
+    { name: 'Patella', file: 'human_patella.glb', scale: 0.001, localX: 0.4, localY: 1.45, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 1.50, labelZ: 0.25 },
 
     // Shelf 3: Upper-Middle Shelf (y = 1.10m - 1.15m)
-    { name: 'Skull', file: 'skull_downloadable.glb', scale: 0.1, localX: -0.35, localY: 1.15, localZ: 0.0, rotateY: Math.PI * 2, labelX: -0.06, labelY: 1.22, labelZ: 0.15 },
-    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 0.98, labelZ: 0.25 },
+    { name: 'Skull', file: 'skull_downloadable.glb', scale: 0.1, localX: -0.35, localY: 1.15, localZ: 0.0, rotateY: Math.PI * 2, labelX: -0.06, labelY: 1.18, labelZ: 0.15 },
+    { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 1.06, labelZ: 0.25 },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.72m - 0.80m)
-    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.3, localY: 0.72, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 0.86, labelZ: 0.15 },
-    { name: 'Sternum', file: 'human_sternum.glb', scale: 0.1, localX: 0.3, localY: 0.8, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 0.69, labelZ: 0.25 },
+    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.3, localY: 0.72, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 0.82, labelZ: 0.15 },
+    { name: 'Sternum', file: 'human_sternum.glb', scale: 0.1, localX: 0.3, localY: 0.8, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 0.70, labelZ: 0.25 },
 
     // Shelf 1: Bottom Shelf (y = 0.56m - 0.60m)
     { name: 'Tibia', file: 'human_tibia.glb', scale: 0.001, localX: -0.3, localY: 0.56, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2, labelX: -0.06, labelY: 0.63, labelZ: 0.15 },
-    { name: 'Humerus', file: 'human_humerous.glb', scale: 0.001, localX: 0.3, localY: 0.60, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2, labelX: 0.06, labelY: 0.45, labelZ: 0.25 }
+    { name: 'Humerus', file: 'human_humerous.glb', scale: 0.001, localX: 0.3, localY: 0.60, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2, labelX: 0.06, labelY: 0.51, labelZ: 0.25 }
   ];
 
   const loader = new GLTFLoader();
@@ -1995,8 +1995,8 @@ function loadCabinetBones() {
 function create3DLabel(text, heightOffset = 0) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 256;
+  canvas.height = 64;
 
   // Clear background
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2004,9 +2004,9 @@ function create3DLabel(text, heightOffset = 0) {
   // Background panel: rounded rect
   ctx.fillStyle = 'rgba(7, 8, 32, 0.85)';
   ctx.strokeStyle = '#00f2fe';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 2;
 
-  const x = 4, y = 4, w = canvas.width - 8, h = canvas.height - 8, r = 20;
+  const x = 2, y = 2, w = canvas.width - 4, h = canvas.height - 4, r = 10;
   if (ctx.roundRect) {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
@@ -2029,7 +2029,7 @@ function create3DLabel(text, heightOffset = 0) {
   }
 
   // Draw bone name text
-  ctx.font = 'bold 50px Arial';
+  ctx.font = 'bold 28px Arial';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -2045,7 +2045,7 @@ function create3DLabel(text, heightOffset = 0) {
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  sprite.scale.set(0.4, 0.1, 1.0); // 40 cm wide, 10 cm high
+  sprite.scale.set(0.24, 0.06, 1.0); // 24 cm wide, 6 cm high
   sprite.position.set(0, heightOffset, 0);
 
   return sprite;
