@@ -1198,9 +1198,19 @@ function startWebcamAR() {
   const video = document.getElementById('webcam-video');
   if (!video) return;
 
+  // Check if mediaDevices and getUserMedia are supported (required in secure contexts or localhost)
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Webcam AR requires a secure context (HTTPS) or localhost.\n\nPlease start your server using HTTPS (e.g. "npx http-server -S -C cert.pem -K key.pem -p 8081") and access the site via "https://".');
+    return;
+  }
+
   // Request mobile camera stream (using environment/back camera if available)
   navigator.mediaDevices.getUserMedia({
     video: { facingMode: 'environment' }
+  }).catch(err => {
+    console.warn('Environment camera request failed or unsupported. Trying fallback camera...', err);
+    // Fallback: Request any available camera (crucial for laptops/desktops without environment cameras)
+    return navigator.mediaDevices.getUserMedia({ video: true });
   }).then(stream => {
     video.srcObject = stream;
     video.style.display = 'block';
