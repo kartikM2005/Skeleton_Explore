@@ -52,6 +52,15 @@ let operatingRoomBox = null;
 let roomColliders = [];
 let visualWalls = [];
 let labShelfGroup = null; // Group containing the GLB lab shelf
+let cabinetBones = []; // List of loaded cabinet bone groups for raycasting/grabbing
+let grabbedBone = null; // Currently grabbed cabinet bone group
+let grabbingController = null; // Controller currently grabbing the bone
+let originalBoneParent = null; // Original parent of the grabbed bone
+let originalBonePosition = new THREE.Vector3(); // Original local position of the grabbed bone
+let originalBoneRotation = new THREE.Euler(); // Original local rotation of the grabbed bone
+let originalBoneScale = new THREE.Vector3(); // Original scale of the grabbed bone
+let grabbedBoneDistance = 0.3; // Default distance of grabbed bone from controller
+let currentGrabbedScaleFactor = 2.0; // Current scale multiplier for grabbed bone
 
 // Visual room boundaries matching the visual walls and windows of Room_updated.glb
 const ROOM_LIMITS = {
@@ -202,10 +211,14 @@ function setupMainScene() {
   // 6DoF Controllers Setup for Zapbox / VR inputs
   controller1 = mainRenderer.xr.getController(0);
   controller1.addEventListener('selectstart', () => onControllerSelect(controller1));
+  controller1.addEventListener('squeezestart', () => onControllerSqueezeStart(controller1));
+  controller1.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller1));
   cameraPitchGroup.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
   controller2.addEventListener('selectstart', () => onControllerSelect(controller2));
+  controller2.addEventListener('squeezestart', () => onControllerSqueezeStart(controller2));
+  controller2.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller2));
   cameraPitchGroup.add(controller2);
 
   // Controller Grip models setup
@@ -1072,6 +1085,21 @@ async function startXRSession(mode) {
       // Restore skeleton position and rotation
       skeletonGroup.position.set(0, skeletonBottomOffset, 0);
       skeletonGroup.rotation.set(0, 0, 0);
+
+      // Release any grabbed cabinet bone on session end
+      if (grabbedBone) {
+        if (originalBoneParent) {
+          originalBoneParent.attach(grabbedBone);
+        } else {
+          mainScene.attach(grabbedBone);
+        }
+        grabbedBone.position.copy(originalBonePosition);
+        grabbedBone.rotation.copy(originalBoneRotation);
+        grabbedBone.scale.copy(originalBoneScale);
+        grabbedBone = null;
+        grabbingController = null;
+        originalBoneParent = null;
+      }
     });
 
   } catch (err) {
@@ -1451,6 +1479,17 @@ function updateXRControllerRaycast() {
       }
     }
 
+    // Check intersection with Cabinet Bones (if not currently grabbed)
+    if (cabinetBones.length > 0 && !grabbedBone) {
+      const intersectsCabinet = xrRaycaster.intersectObjects(cabinetBones, true);
+      if (intersectsCabinet.length > 0) {
+        if (intersectsCabinet[0].distance < laserLength) {
+          laserLength = intersectsCabinet[0].distance;
+          hitFound = true;
+        }
+      }
+    }
+
     // Update laser line visual length
     const positions = laser.geometry.attributes.position.array;
     positions[5] = -laserLength; // Update the Z coordinate of the end point
@@ -1503,6 +1542,40 @@ function updateVRLocomotion(dt) {
     if (!source.gamepad || !source.gamepad.axes) return;
 
     const axes = source.gamepad.axes;
+
+    // Handle grabbed bone zooming and rotation if this controller is holding it
+    const controller = mainRenderer.xr.getController(index);
+    if (grabbedBone && controller === grabbingController) {
+      let joystickX = 0;
+      let joystickY = 0;
+      if (axes.length >= 4 && (Math.abs(axes[2]) > 0.05 || Math.abs(axes[3]) > 0.05)) {
+        joystickX = axes[2];
+        joystickY = axes[3];
+      } else if (axes.length >= 2) {
+        joystickX = axes[0];
+        joystickY = axes[1];
+      }
+
+      // Rotate bone with joystickX (spin horizontally)
+      if (Math.abs(joystickX) > 0.05) {
+        grabbedBone.rotation.y += joystickX * 2.0 * dt;
+      }
+
+      // Zoom bone with joystickY (adjust distance and scale)
+      if (Math.abs(joystickY) > 0.05) {
+        // Adjust distance along the controller's local forward axis (-Z)
+        grabbedBoneDistance += joystickY * 0.4 * dt;
+        grabbedBoneDistance = Math.max(0.15, Math.min(0.8, grabbedBoneDistance));
+        grabbedBone.position.set(0, 0, -grabbedBoneDistance);
+
+        // Adjust scale factor (pushing UP zoom in, pulling DOWN zoom out)
+        const scaleChange = -joystickY * 1.5 * dt;
+        currentGrabbedScaleFactor += scaleChange;
+        currentGrabbedScaleFactor = Math.max(0.5, Math.min(5.0, currentGrabbedScaleFactor));
+        grabbedBone.scale.copy(originalBoneScale).multiplyScalar(currentGrabbedScaleFactor);
+      }
+      return; // Skip walking/turning for this controller
+    }
 
     // WebXR standard gamepad thumbstick mappings:
     // Typically axes[2] is horizontal and axes[3] is vertical.
@@ -1745,6 +1818,82 @@ function onControllerSelect(controller) {
   }
 }
 
+// 10.8 Handle Grab (Squeeze/Grip) interaction for VR controllers
+function onControllerSqueezeStart(controller) {
+  if (!mainRenderer.xr.isPresenting) return;
+  if (grabbedBone) return; // Only grab one bone at a time
+
+  // Perform Raycasting from the controller
+  tempMatrix.identity().extractRotation(controller.matrixWorld);
+  const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+  const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
+  xrRaycaster.set(origin, direction);
+
+  if (cabinetBones.length > 0) {
+    const intersects = xrRaycaster.intersectObjects(cabinetBones, true);
+    if (intersects.length > 0) {
+      // Find the intersected bone group
+      let obj = intersects[0].object;
+      let targetBoneGroup = null;
+      while (obj && obj !== mainScene) {
+        if (obj.userData && obj.userData.isCabinetBone) {
+          targetBoneGroup = obj;
+          break;
+        }
+        obj = obj.parent;
+      }
+
+      if (targetBoneGroup) {
+        // Grab the bone!
+        grabbedBone = targetBoneGroup;
+        grabbingController = controller;
+        originalBoneParent = targetBoneGroup.parent;
+
+        // Save original position, rotation, scale
+        originalBonePosition.copy(targetBoneGroup.position);
+        originalBoneRotation.copy(targetBoneGroup.rotation);
+        originalBoneScale.copy(targetBoneGroup.scale);
+
+        // Reset scale factor and scale the bone up
+        currentGrabbedScaleFactor = 2.0;
+        targetBoneGroup.scale.copy(originalBoneScale).multiplyScalar(currentGrabbedScaleFactor);
+
+        // Parent the bone to the controller so it moves and rotates with it
+        controller.attach(targetBoneGroup);
+
+        // Position it in front of the controller (e.g. 0.3 meters forward)
+        targetBoneGroup.position.set(0, 0, -0.3);
+        targetBoneGroup.rotation.set(0, 0, 0);
+
+        grabbedBoneDistance = 0.3;
+        console.log(`Grabbed bone: ${targetBoneGroup.userData.boneName}`);
+      }
+    }
+  }
+}
+
+function onControllerSqueezeEnd(controller) {
+  if (!mainRenderer.xr.isPresenting) return;
+  if (grabbedBone && grabbingController === controller) {
+    // Release the grabbed bone!
+    if (originalBoneParent) {
+      originalBoneParent.attach(grabbedBone);
+    } else {
+      mainScene.attach(grabbedBone);
+    }
+
+    // Restore original transform
+    grabbedBone.position.copy(originalBonePosition);
+    grabbedBone.rotation.copy(originalBoneRotation);
+    grabbedBone.scale.copy(originalBoneScale);
+
+    console.log(`Released bone: ${grabbedBone.userData.boneName}`);
+    grabbedBone = null;
+    grabbingController = null;
+    originalBoneParent = null;
+  }
+}
+
 // 11. Load the 3D Operating Room Model
 function loadOperatingRoomModel() {
   const loader = new GLTFLoader();
@@ -1927,8 +2076,8 @@ function loadCabinetBones() {
     { name: 'Hand', file: 'human_hand_bones.glb', scale: 0.1, localX: 0.35, localY: 1.1, localZ: 0.0, rotateY: Math.PI, labelX: 0.15, labelY: 1.18, labelZ: 0.25 },
 
     // Shelf 2: Lower-Middle Shelf (y = 0.72m - 0.80m)
-    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.3, localY: 0.72, localZ: 0.0, rotateY: Math.PI, labelX: -0.06, labelY: 0.82, labelZ: 0.15 },
-    { name: 'Sternum', file: 'human_sternum.glb', scale: 0.1, localX: 0.3, localY: 0.8, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 0.70, labelZ: 0.25 },
+    { name: 'Pelvis', file: 'human_pelvis.glb', scale: 0.001, localX: -0.3, localY: 0.72, localZ: 0.0, rotateY: Math.PI, labelX: -0.15, labelY: 0.82, labelZ: 0.15 },
+    { name: 'Sternum', file: 'human_sternum.glb', scale: 0.1, localX: 0.3, localY: 0.8, localZ: 0.0, rotateY: Math.PI, labelX: 0.06, labelY: 0.90, labelZ: 0.25 },
 
     // Shelf 1: Bottom Shelf (y = 0.56m - 0.60m)
     { name: 'Tibia', file: 'human_tibia.glb', scale: 0.001, localX: -0.3, localY: 0.56, localZ: 0.0, rotateZ: Math.PI / 2, rotateY: Math.PI / 2, labelX: -0.06, labelY: 0.63, labelZ: 0.15 },
@@ -1981,6 +2130,12 @@ function loadCabinetBones() {
           labShelfGroup.add(boneGroup);
           labShelfGroup.add(labelSprite);
         }
+
+        // Tag the group for grabbing interaction and add to list
+        boneGroup.name = `cabinet_bone_${bone.name}`;
+        boneGroup.userData = { isCabinetBone: true, boneName: bone.name, originalScale: new THREE.Vector3(bone.scale, bone.scale, bone.scale) };
+        cabinetBones.push(boneGroup);
+
         console.log(`Bone model ${bone.name} successfully placed inside cabinet shelf with centered staggered label.`);
       },
       undefined,
