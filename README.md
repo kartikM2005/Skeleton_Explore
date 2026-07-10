@@ -23,6 +23,9 @@ Set inside a meticulously detailed virtual operating room, users can study a lif
 ![OsteoExplore AR Pass-through View](assets/webxr_ar_mode.png)
 *Figure 4: Simulated Augmented Reality (AR) pass-through mode in the WebXR Device API emulator, displaying the life-size skeleton model aligned with controller guides.*
 
+![OsteoExplore Mobile Webcam AR Pass-through View](assets/webcam_ar_mode.jpg)
+*Figure 5: Live mobile webcam pass-through AR mode running on a physical smartphone, placing the interactive 3D skeleton model in the real-world room.*
+
 ---
 
 ## 🌟 Key Features
@@ -62,6 +65,7 @@ Human_skeleton_Explore/
 │
 ├── assets/
 │   ├── dossier_panel_skull.png     # Screenshot showing the application HUD & Skull Dossier
+│   ├── webcam_ar_mode.jpg          # Live mobile webcam pass-through AR screenshot
 │   ├── webxr_ar_mode.png           # Screenshot showing simulated AR pass-through mode
 │   ├── webxr_vr_cabinet.png        # Screenshot showing VR cabinet bone interaction
 │   └── webxr_vr_dossier.png        # Screenshot showing VR holographic dossier panel
