@@ -74,6 +74,8 @@ let vrBonePreview = null; // Isolated bone geometry floating inside VR world
 let vrCloseButton = null; // Tappable CLOSE button mesh on the VR panel
 let vrCycleIndex = -1;    // Tracker for trigger-based bone cycling in VR mode
 let lastTriggerTime = 0;   // Timestamp to track double-trigger / double-clicks in VR
+let vrGuidePanel = null;  // Holographic controller guide panel rendered inside VR
+let vrGuideActive = false;// Tracker for whether the VR controller guide is active
 
 // Webcam AR State Variables (Mobile Pass-Through fallback)
 let webcamARActive = false;
@@ -147,7 +149,7 @@ function setupMainScene() {
   mainRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   mainRenderer.shadowMap.enabled = true;
-  mainRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  mainRenderer.shadowMap.type = THREE.PCFShadowMap;
   mainRenderer.xr.enabled = true; // Enable WebXR!
 
   // Orbit Controls
@@ -170,8 +172,8 @@ function setupMainScene() {
   const mainLight = new THREE.DirectionalLight(0xffffff, 0.85);
   mainLight.position.set(5, 8, 5);
   mainLight.castShadow = true;
-  mainLight.shadow.mapSize.width = 2048;
-  mainLight.shadow.mapSize.height = 2048;
+  mainLight.shadow.mapSize.width = 1024;
+  mainLight.shadow.mapSize.height = 1024;
   mainLight.shadow.bias = -0.0001;
   mainScene.add(mainLight);
 
@@ -210,13 +212,11 @@ function setupMainScene() {
 
   // 6DoF Controllers Setup for Zapbox / VR inputs
   controller1 = mainRenderer.xr.getController(0);
-  controller1.addEventListener('selectstart', () => onControllerSelect(controller1));
   controller1.addEventListener('squeezestart', () => onControllerSqueezeStart(controller1));
   controller1.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller1));
   cameraPitchGroup.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
-  controller2.addEventListener('selectstart', () => onControllerSelect(controller2));
   controller2.addEventListener('squeezestart', () => onControllerSqueezeStart(controller2));
   controller2.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller2));
   cameraPitchGroup.add(controller2);
@@ -1024,6 +1024,11 @@ async function startXRSession(mode) {
     mainRenderer.xr.setReferenceSpaceType(mode === 'immersive-ar' ? 'local' : 'local-floor');
     await mainRenderer.xr.setSession(session);
 
+    // Optimize render target framebuffer resolution for mobile VR headsets (Meta Quest)
+    if (mainRenderer.xr.setFramebufferScaleFactor) {
+      mainRenderer.xr.setFramebufferScaleFactor(0.9);
+    }
+
     if (mode === 'immersive-ar') {
       mainScene.background = null;
       mainRenderer.setClearAlpha(0);
@@ -1052,6 +1057,7 @@ async function startXRSession(mode) {
       if (dolly) {
         dolly.position.set(1.0, 0, 0.2);
       }
+      showVRGuide();
     }
 
     showXRMessage(`Entered XR Session. Put on your device!`);
@@ -1059,6 +1065,7 @@ async function startXRSession(mode) {
     session.addEventListener('end', () => {
       xrSession = null;
       hideXRMessage();
+      hideVRGuide();
       mainRenderer.setClearAlpha(1);
 
       // Restore background
@@ -1157,7 +1164,7 @@ function render() {
 
   mainRenderer.render(mainScene, mainCamera);
 
-  if (subViewport.classList.contains('visible')) {
+  if (subViewport.classList.contains('visible') && !mainRenderer.xr.isPresenting) {
     isolatedControls.update();
     isolatedRenderer.render(isolatedScene, isolatedCamera);
   }
@@ -1180,6 +1187,15 @@ function render() {
       .addScaledVector(camRight, 0.55)
       .addScaledVector(camUp, -0.05);
     vrInfoPanel.quaternion.copy(mainCamera.quaternion);
+  }
+
+  // Anchor VR guide panel centered in front of the user's view every frame
+  if (mainRenderer.xr.isPresenting && vrGuidePanel && vrGuidePanel.visible) {
+    const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
+    vrGuidePanel.position
+      .copy(mainCamera.position)
+      .addScaledVector(camForward, 1.25);
+    vrGuidePanel.quaternion.copy(mainCamera.quaternion);
   }
 
 
@@ -1520,6 +1536,23 @@ function updateVRLocomotion(dt) {
   const session = mainRenderer.xr.getSession();
   if (!session || !dolly) return;
 
+  if (vrGuideActive) {
+    session.inputSources.forEach((source) => {
+      if (!source.gamepad || !source.gamepad.buttons) return;
+      const handedness = source.handedness;
+      const aPressed = !!(source.gamepad.buttons[4] && source.gamepad.buttons[4].pressed);
+      const keyA = `${handedness}_button_4`;
+
+      if (aPressed && !window[keyA]) {
+        window[keyA] = true;
+        hideVRGuide();
+      } else if (!aPressed) {
+        window[keyA] = false;
+      }
+    });
+    return; // Freeze locomotion while guide is active
+  }
+
   const speed = 2.5;
   const moveVector = new THREE.Vector3();
 
@@ -1615,10 +1648,23 @@ function updateVRLocomotion(dt) {
       const aPressed = !!(buttons[4] && buttons[4].pressed);
       const bPressed = !!(buttons[5] && buttons[5].pressed);
       const thumbstickPressed = !!(buttons[3] && buttons[3].pressed);
+      const triggerPressed = !!(buttons[0] && buttons[0].pressed);
 
       const keyA = `${handedness}_button_4`;
       const keyB = `${handedness}_button_5`;
       const keyThumb = `${handedness}_button_3`;
+      const keyTrigger = `${handedness}_button_0`;
+
+      // Trigger pull (edge triggered)
+      if (triggerPressed && !window[keyTrigger]) {
+        window[keyTrigger] = true;
+        const controller = mainRenderer.xr.getController(index);
+        if (controller) {
+          onControllerSelect(controller);
+        }
+      } else if (!triggerPressed) {
+        window[keyTrigger] = false;
+      }
 
       // Thumbstick click closes the panel
       if (thumbstickPressed && !window[keyThumb]) {
@@ -1628,30 +1674,10 @@ function updateVRLocomotion(dt) {
         window[keyThumb] = false;
       }
 
-      // A/X Button click (edge triggered)
+      // A/X Button click (edge triggered) to toggle/open helper guide
       if (aPressed && !window[keyA]) {
         window[keyA] = true;
-        if (handedness === 'right') {
-          // Right A opens the panel for the pointed-at bone
-          const controller = mainRenderer.xr.getController(index);
-          if (controller) {
-            tempMatrix.identity().extractRotation(controller.matrixWorld);
-            const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
-            const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
-            xrRaycaster.set(origin, direction);
-
-            if (skeletonMesh) {
-              const intersectsSkeleton = xrRaycaster.intersectObject(skeletonMesh);
-              if (intersectsSkeleton.length > 0) {
-                const intersect = intersectsSkeleton[0];
-                const boneKey = getClosestBoneVR(intersect.point);
-                if (boneKey) {
-                  selectBone(boneKey);
-                }
-              }
-            }
-          }
-        }
+        showVRGuide();
       } else if (!aPressed) {
         window[keyA] = false;
       }
@@ -1787,6 +1813,10 @@ function updateVRLocomotion(dt) {
 function onControllerSelect(controller) {
   if (!mainRenderer.xr.isPresenting) return;
 
+  if (vrGuideActive) {
+    return;
+  }
+
   const currentTime = new Date().getTime();
   const triggerLength = currentTime - lastTriggerTime;
 
@@ -1831,6 +1861,11 @@ function onControllerSelect(controller) {
 // 10.8 Handle Grab (Squeeze/Grip) interaction for VR controllers
 function onControllerSqueezeStart(controller) {
   if (!mainRenderer.xr.isPresenting) return;
+
+  if (vrGuideActive) {
+    return;
+  }
+
   if (grabbedBone) return; // Only grab one bone at a time
 
   // Perform Raycasting from the controller
@@ -1915,12 +1950,12 @@ function loadOperatingRoomModel() {
       // Keep hidden by default; only show in VR mode
       operatingRoomGroup.visible = false;
 
-      // Enable shadow receiving on meshes in the room and cache colliders
+      // Disable dynamic shadows on room meshes for VR performance optimization
       roomColliders = [];
       operatingRoomGroup.traverse((child) => {
         if (child.isMesh) {
-          child.receiveShadow = true;
-          child.castShadow = true;
+          child.receiveShadow = false;
+          child.castShadow = false;
           roomColliders.push(child);
         }
       });
@@ -2021,11 +2056,11 @@ function loadLabShelf() {
     (gltf) => {
       labShelfGroup = gltf.scene;
 
-      // Enable shadows
+      // Disable dynamic shadows on static lab shelf for VR performance optimization
       labShelfGroup.traverse((child) => {
         if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+          child.castShadow = false;
+          child.receiveShadow = false;
         }
       });
 
@@ -2101,11 +2136,11 @@ function loadCabinetBones() {
       (gltf) => {
         const boneGroup = new THREE.Group();
 
-        // Enable shadows and handle materials
+        // Disable dynamic shadows on cabinet bones for VR performance optimization
         gltf.scene.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = false;
+            child.receiveShadow = false;
           }
         });
 
@@ -2419,6 +2454,144 @@ function hideVRInfoPanel() {
     vrBonePreview = null;
   }
   vrCloseButton = null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 12.5 Holographic VR Controller Guide Panel
+// ─────────────────────────────────────────────────────────────
+
+function showVRGuide() {
+  hideVRGuide(); // Clean up if any
+  vrGuideActive = true;
+
+  var CW = 1280, CH = 960;
+  var canvas = document.createElement('canvas');
+  canvas.width = CW;
+  canvas.height = CH;
+  var ctx = canvas.getContext('2d');
+
+  // Panel background
+  ctx.fillStyle = 'rgba(7, 8, 32, 0.96)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.fill();
+
+  // Neon border
+  ctx.strokeStyle = '#00f2fe';
+  ctx.lineWidth = 5;
+  ctx.shadowColor = '#00f2fe';
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, CW - 16, CH - 16, 36);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Title
+  ctx.fillStyle = '#00f2fe';
+  ctx.font = 'bold 56px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('VR CONTROLLER GUIDE', CW / 2, 80);
+
+  // Subtitle
+  ctx.fillStyle = '#a0aec0';
+  ctx.font = 'italic 28px Arial';
+  ctx.fillText('OsteoExplore Interactive Lab Guide', CW / 2, 130);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(0,242,254,0.3)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(60, 155);
+  ctx.lineTo(CW - 60, 155);
+  ctx.stroke();
+
+  // Helper function to draw key-value controls beautifully
+  var currentY = 215;
+  function drawControlRow(keyText, descriptionText) {
+    // Key pill background
+    ctx.fillStyle = 'rgba(0, 242, 254, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 242, 254, 0.7)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(80, currentY - 26, 370, 44, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Key text
+    ctx.fillStyle = '#00f2fe';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(keyText, 265, currentY + 5);
+
+    // Description text
+    ctx.fillStyle = '#f0f3f9';
+    ctx.font = '24px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(descriptionText, 490, currentY + 5);
+
+    currentY += 71;
+  }
+
+  // Draw 8 rows of control mappings
+  drawControlRow('LEFT THUMBSTICK', 'Walk & Move around the room');
+  drawControlRow('RIGHT THUMBSTICK', 'Turn & Rotate camera view');
+  drawControlRow('POINT & PULL TRIGGER', 'Select / inspect bones on skeleton');
+  drawControlRow('POINT & HOLD GRIP', 'Grab bones from cabinet to inspect');
+  drawControlRow('THUMBSTICK (GRABBING)', 'Rotate, zoom & scale grabbed bone');
+  drawControlRow('BUTTON A / X', 'Toggle (open/close) this helper guide');
+  drawControlRow('BUTTON B / THUMBSTICK CLICK', 'Close active bone inspection card');
+  drawControlRow('DOUBLE-PULL TRIGGER', 'Shortcut to close active bone card');
+
+  // Divider 2
+  ctx.strokeStyle = 'rgba(0,242,254,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, 785);
+  ctx.lineTo(CW - 60, 785);
+  ctx.stroke();
+
+  // Footer / Dismiss hint
+  ctx.fillStyle = '#ff8800';
+  ctx.font = 'bold 34px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('PRESS BUTTON A / X TO CLOSE GUIDE', CW / 2, 855);
+
+  var texture = new THREE.CanvasTexture(canvas);
+  var panelGeom = new THREE.PlaneGeometry(1.8, 1.35);
+  var panelMat = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  
+  vrGuidePanel = new THREE.Mesh(panelGeom, panelMat);
+  vrGuidePanel.renderOrder = 1001; // Render on top of normal bone cards
+  vrGuidePanel.visible = true;
+
+  if (cameraPitchGroup) {
+    cameraPitchGroup.add(vrGuidePanel);
+  } else if (dolly) {
+    dolly.add(vrGuidePanel);
+  }
+}
+
+function hideVRGuide() {
+  if (vrGuidePanel) {
+    if (vrGuidePanel.geometry) vrGuidePanel.geometry.dispose();
+    if (vrGuidePanel.material) {
+      if (vrGuidePanel.material.map) vrGuidePanel.material.map.dispose();
+      vrGuidePanel.material.dispose();
+    }
+    if (cameraPitchGroup) {
+      cameraPitchGroup.remove(vrGuidePanel);
+    } else if (dolly) {
+      dolly.remove(vrGuidePanel);
+    }
+    vrGuidePanel = null;
+  }
+  vrGuideActive = false;
 }
 
 function vrPanelWrapText(ctx, text, x, y, maxWidth, lineHeight) {

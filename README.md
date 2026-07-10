@@ -6,11 +6,22 @@ Set inside a meticulously detailed virtual operating room, users can study a lif
 
 ---
 
-## 📸 Application Screenshot
+## 📸 Application Screenshots
 
+### Desktop Viewport
 ![OsteoExplore Dossier Panel & Skeleton View](assets/dossier_panel_skull.png)
-
 *Figure 1: The desktop viewport showing the main skeleton, interactive 3D hotspots, and the detailed glassmorphic Dossier Panel with an isolated, rotatable view of the skull.*
+
+### WebXR Virtual Reality (VR) Mode
+![OsteoExplore VR Holographic HUD & Isolated Bone View](assets/webxr_vr_dossier.png)
+*Figure 2: Inside VR mode using a WebXR headset. The selected bone (Skull) is highlighted with a glowing overlay, alongside a floating holographic information panel and an isolated 3D preview model.*
+
+![OsteoExplore VR Cabinet Grab & Inspection](assets/webxr_vr_cabinet.png)
+*Figure 3: Interacting with the laboratory cabinet in VR. The user has grabbed the skull model from the shelf using controller grip triggers to zoom, rotate, and inspect it.*
+
+### WebXR Augmented Reality (AR) Mode
+![OsteoExplore AR Pass-through View](assets/webxr_ar_mode.png)
+*Figure 4: Simulated Augmented Reality (AR) pass-through mode in the WebXR Device API emulator, displaying the life-size skeleton model aligned with controller guides.*
 
 ---
 
@@ -50,7 +61,10 @@ Set inside a meticulously detailed virtual operating room, users can study a lif
 Human_skeleton_Explore/
 │
 ├── assets/
-│   └── dossier_panel_skull.png     # Screenshot showing the application HUD & Skull Dossier
+│   ├── dossier_panel_skull.png     # Screenshot showing the application HUD & Skull Dossier
+│   ├── webxr_ar_mode.png           # Screenshot showing simulated AR pass-through mode
+│   ├── webxr_vr_cabinet.png        # Screenshot showing VR cabinet bone interaction
+│   └── webxr_vr_dossier.png        # Screenshot showing VR holographic dossier panel
 │
 ├── skeleton/                       # GLTF/GLB 3D models directory
 │   ├── Room_updated.glb            # Visual medical operating room scene
