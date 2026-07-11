@@ -1056,3 +1056,132 @@ body.ar-active .dossier-btn {
   background: rgba(0, 242, 254, 0.1) !important;
   border-color: var(--primary) !important;
 }
+
+/* Fallback Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(4, 5, 15, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  transition: opacity 0.3s ease;
+}
+
+.modal-content {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-neon), inset 0 0 20px rgba(0, 242, 254, 0.05);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  padding: 32px;
+  text-align: center;
+  font-family: var(--font-body);
+}
+
+.modal-content h2 {
+  font-family: var(--font-title);
+  font-size: 1.6rem;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.modal-content p {
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.modal-hint {
+  background: rgba(0, 242, 254, 0.08);
+  border: 1px dashed rgba(0, 242, 254, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.85rem;
+  color: var(--primary);
+  margin-bottom: 24px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.modal-btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 0.95rem;
+}
+
+.modal-btn.primary {
+  background: var(--primary);
+  color: #070814;
+  box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+}
+
+.modal-btn.primary:hover {
+  background: #ffffff;
+  color: #070814;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.modal-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.modal-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+/* Floating Simulator Exit Button */
+#btn-exit-simulator {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #fff;
+  background: rgba(220, 38, 38, 0.8);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: all 0.25s ease;
+}
+
+#btn-exit-simulator:hover {
+  background: rgba(220, 38, 38, 1);
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.6);
+  transform: translateY(-2px);
+}

@@ -4,6 +4,39 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { BONES_DATA } from './data.js';
 
+// Polyfill for CanvasRenderingContext2D.prototype.roundRect for older VR headset/mobile browsers
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (typeof r === 'number') {
+      r = [r];
+    }
+    if (Array.isArray(r)) {
+      if (r.length === 1) r = [r[0], r[0], r[0], r[0]];
+      else if (r.length === 2) r = [r[0], r[1], r[0], r[1]];
+      else if (r.length === 3) r = [r[0], r[1], r[2], r[1]];
+    } else {
+      r = [0, 0, 0, 0];
+    }
+
+    const rLT = r[0];
+    const rRT = r[1];
+    const rRB = r[2];
+    const rLB = r[3];
+
+    this.moveTo(x + rLT, y);
+    this.lineTo(x + w - rRT, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + rRT);
+    this.lineTo(x + w, y + h - rRB);
+    this.quadraticCurveTo(x + w, y + h, x + w - rRB, y + h);
+    this.lineTo(x + rLB, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - rLB);
+    this.lineTo(x, y + rLT);
+    this.quadraticCurveTo(x, y, x + rLT, y);
+    this.closePath();
+    return this;
+  };
+}
+
 // DOM Elements
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
@@ -26,6 +59,11 @@ const btnAR = document.getElementById('btn-ar');
 const xrInstruction = document.getElementById('xr-instruction');
 const xrMessage = document.getElementById('xr-message');
 const xrClose = document.getElementById('xr-close');
+const vrFallbackModal = document.getElementById('vr-fallback-modal');
+const btnEnterSimulator = document.getElementById('btn-enter-simulator');
+const btnCloseModal = document.getElementById('btn-close-modal');
+const btnExitSimulator = document.getElementById('btn-exit-simulator');
+let isVRSimulatorActive = false;
 
 // Global Application State
 let mainScene, mainCamera, mainRenderer, mainControls;
@@ -214,23 +252,23 @@ function setupMainScene() {
   controller1 = mainRenderer.xr.getController(0);
   controller1.addEventListener('squeezestart', () => onControllerSqueezeStart(controller1));
   controller1.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller1));
-  cameraPitchGroup.add(controller1);
+  dolly.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
   controller2.addEventListener('squeezestart', () => onControllerSqueezeStart(controller2));
   controller2.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller2));
-  cameraPitchGroup.add(controller2);
+  dolly.add(controller2);
 
   // Controller Grip models setup
   const controllerModelFactory = new XRControllerModelFactory();
 
   controllerGrip1 = mainRenderer.xr.getControllerGrip(0);
   controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-  cameraPitchGroup.add(controllerGrip1);
+  dolly.add(controllerGrip1);
 
   controllerGrip2 = mainRenderer.xr.getControllerGrip(1);
   controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-  cameraPitchGroup.add(controllerGrip2);
+  dolly.add(controllerGrip2);
 
   // Visual pointer rays for 6DoF aiming
   const laserGeom = new THREE.BufferGeometry().setFromPoints([
@@ -850,6 +888,20 @@ function setupEventListeners() {
     if (xrSession) xrSession.end();
   });
 
+  // VR Fallback Modal & Simulator Event Listeners
+  btnEnterSimulator.addEventListener('click', () => {
+    vrFallbackModal.style.display = 'none';
+    enterVRSimulator();
+  });
+
+  btnCloseModal.addEventListener('click', () => {
+    vrFallbackModal.style.display = 'none';
+  });
+
+  btnExitSimulator.addEventListener('click', () => {
+    exitVRSimulator();
+  });
+
   // Double-tap anywhere on screen to dismiss/close the active bone info panel (mobile/cardboard)
   let lastTap = 0;
   window.addEventListener('touchstart', (e) => {
@@ -904,6 +956,26 @@ function onCanvasClick(e) {
 
   raycaster.setFromCamera(mouse, mainCamera);
 
+  // If simulator is active, check click on cabinet bones first
+  if (isVRSimulatorActive && cabinetBones.length > 0) {
+    const intersectsCabinet = raycaster.intersectObjects(cabinetBones, true);
+    if (intersectsCabinet.length > 0) {
+      let obj = intersectsCabinet[0].object;
+      let targetBoneGroup = null;
+      while (obj && obj !== mainScene) {
+        if (obj.userData && obj.userData.isCabinetBone) {
+          targetBoneGroup = obj;
+          break;
+        }
+        obj = obj.parent;
+      }
+      if (targetBoneGroup) {
+        selectBone(targetBoneGroup.userData.boneName.toLowerCase());
+        return;
+      }
+    }
+  }
+
   if (skeletonMesh) {
     const intersects = raycaster.intersectObject(skeletonMesh);
 
@@ -931,8 +1003,17 @@ function onCanvasHover(e) {
   raycaster.setFromCamera(mouse, mainCamera);
 
   let hoveredKey = null;
+  let hoveredCabinetBone = false;
 
-  if (skeletonMesh) {
+  // If simulator is active, check hover on cabinet bones first
+  if (isVRSimulatorActive && cabinetBones.length > 0) {
+    const intersectsCabinet = raycaster.intersectObjects(cabinetBones, true);
+    if (intersectsCabinet.length > 0) {
+      hoveredCabinetBone = true;
+    }
+  }
+
+  if (skeletonMesh && !hoveredCabinetBone) {
     const intersects = raycaster.intersectObject(skeletonMesh);
     if (intersects.length > 0) {
       const localPoint = intersects[0].point.clone();
@@ -941,7 +1022,7 @@ function onCanvasHover(e) {
     }
   }
 
-  if (hoveredKey !== currentHoveredBone) {
+  if (hoveredKey !== currentHoveredBone || hoveredCabinetBone) {
     if (currentHoveredBone) {
       const pin = document.getElementById(`pin-${currentHoveredBone}`);
       if (pin) pin.classList.remove('hovered');
@@ -952,6 +1033,8 @@ function onCanvasHover(e) {
     if (currentHoveredBone) {
       const pin = document.getElementById(`pin-${currentHoveredBone}`);
       if (pin) pin.classList.add('hovered');
+      mainRenderer.domElement.style.cursor = 'pointer';
+    } else if (hoveredCabinetBone) {
       mainRenderer.domElement.style.cursor = 'pointer';
     } else {
       mainRenderer.domElement.style.cursor = 'grab';
@@ -1005,13 +1088,21 @@ async function startXRSession(mode) {
   }
 
   if (!navigator.xr) {
-    showXRMessage("WebXR is not supported by your browser. Use a compatible VR headset or AR phone.");
+    if (mode === 'immersive-vr') {
+      vrFallbackModal.style.display = 'flex';
+    } else {
+      showXRMessage("WebXR is not supported by your browser. Use a compatible VR headset or AR phone.");
+    }
     return;
   }
 
   const supported = await navigator.xr.isSessionSupported(mode);
   if (!supported) {
-    showXRMessage(`WebXR ${mode === 'immersive-ar' ? 'AR' : 'VR'} mode is not supported on this hardware.`);
+    if (mode === 'immersive-vr') {
+      vrFallbackModal.style.display = 'flex';
+    } else {
+      showXRMessage(`WebXR ${mode === 'immersive-ar' ? 'AR' : 'VR'} mode is not supported on this hardware.`);
+    }
     return;
   }
 
@@ -1021,7 +1112,19 @@ async function startXRSession(mode) {
     });
 
     xrSession = session;
-    mainRenderer.xr.setReferenceSpaceType(mode === 'immersive-ar' ? 'local' : 'local-floor');
+
+    // Determine the reference space type to use with fallback validation
+    let referenceSpaceType = mode === 'immersive-ar' ? 'local' : 'local-floor';
+    if (mode === 'immersive-vr') {
+      try {
+        await session.requestReferenceSpace('local-floor');
+      } catch (e) {
+        console.warn("local-floor reference space is not supported by this session. Falling back to local:", e);
+        referenceSpaceType = 'local';
+      }
+    }
+
+    mainRenderer.xr.setReferenceSpaceType(referenceSpaceType);
     await mainRenderer.xr.setSession(session);
 
     // Optimize render target framebuffer resolution for mobile VR headsets (Meta Quest)
@@ -1740,9 +1843,28 @@ function updateVRLocomotion(dt) {
 
       // Vertical Tilting (Pitch)
       if (Math.abs(joystickY) > 0 && cameraPitchGroup) {
+        // Pivot around the active scene camera's current position (preventing the swing effect where camera moves down/up)
+        mainCamera.updateMatrixWorld(true);
+        const headsetWorldPos = new THREE.Vector3();
+        mainCamera.getWorldPosition(headsetWorldPos);
+
         cameraPitchGroup.rotation.x -= joystickY * turnSpeed * dt;
-        // Limit pitch to prevent flipping upside down (-80 to 80 degrees)
-        cameraPitchGroup.rotation.x = Math.max(-1.4, Math.min(1.4, cameraPitchGroup.rotation.x));
+        // Limit pitch to prevent flipping upside down (-80 to 80 degrees in AR, -30 to 30 degrees in VR)
+        const isVR = session && session.mode === 'immersive-vr';
+        const maxPitch = isVR ? (30 * Math.PI / 180) : 1.4;
+        cameraPitchGroup.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, cameraPitchGroup.rotation.x));
+
+        // Update matrices to compute new positions
+        dolly.updateMatrixWorld(true);
+        cameraPitchGroup.updateMatrixWorld(true);
+        mainCamera.updateMatrixWorld(true);
+
+        // Correct dolly shift
+        const newHeadsetWorldPos = new THREE.Vector3();
+        mainCamera.getWorldPosition(newHeadsetWorldPos);
+
+        const shift = new THREE.Vector3().subVectors(headsetWorldPos, newHeadsetWorldPos);
+        dolly.position.add(shift);
       }
     }
   });
@@ -2727,5 +2849,106 @@ function debugSceneTree() {
       console.log(`Node: ${child.name} | Type: ${child.type} | Visible: ${child.visible} | Pos: [${child.position.x.toFixed(2)}, ${child.position.y.toFixed(2)}, ${child.position.z.toFixed(2)}] | WorldPos: [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}] | Scale: [${child.scale.x.toFixed(4)}, ${child.scale.y.toFixed(4)}, ${child.scale.z.toFixed(4)}]`);
     }
   });
+}
+
+// --- Desktop VR Simulator Mode ---
+function enterVRSimulator() {
+  if (isVRSimulatorActive) return;
+  isVRSimulatorActive = true;
+
+  // Show exit simulator button
+  btnExitSimulator.style.display = 'flex';
+
+  // Save original settings
+  mainScene.userData.originalBackground = mainScene.background;
+  mainScene.userData.originalMainGroupPos = skeletonGroup.position.clone();
+  mainScene.userData.originalMainGroupRot = skeletonGroup.rotation.clone();
+  mainScene.userData.originalControlsTarget = mainControls.target.clone();
+
+  // Hide 2D HTML labels container
+  labelsContainer.style.display = 'none';
+
+  // Hide grid helper and floor shadow for VR room immersion
+  if (gridHelper) gridHelper.visible = false;
+  if (floorPlane) floorPlane.visible = false;
+
+  // Show virtual operating room and cabinet shelf
+  if (operatingRoomGroup) {
+    operatingRoomGroup.visible = true;
+  }
+
+  // Set dark environment background matching VR mode
+  mainScene.background = new THREE.Color(0x070820);
+  mainRenderer.setClearAlpha(1.0);
+
+  // Position skeleton at the VR room coordinate space
+  skeletonGroup.position.set(1.0, skeletonBottomOffset, -1.2);
+  skeletonGroup.rotation.set(0, 0, 0);
+  skeletonGroup.updateMatrixWorld(true);
+
+  // Position controls camera to standing directly in front of the skeleton inside the VR room
+  mainControls.target.set(1.0, 1.25, -1.2);
+  mainCamera.position.set(1.0, 1.45, 0.45);
+  mainControls.update();
+
+  console.log("Desktop VR Simulator Mode activated.");
+}
+
+function exitVRSimulator() {
+  if (!isVRSimulatorActive) return;
+  isVRSimulatorActive = false;
+
+  // Hide exit button
+  btnExitSimulator.style.display = 'none';
+
+  // Hide virtual operating room
+  if (operatingRoomGroup) {
+    operatingRoomGroup.visible = false;
+  }
+
+  // Restore background
+  if (mainScene.userData.originalBackground !== undefined) {
+    mainScene.background = mainScene.userData.originalBackground;
+  } else {
+    mainScene.background = null;
+  }
+  mainRenderer.setClearAlpha(1.0);
+
+  // Show floor helpers
+  if (gridHelper) gridHelper.visible = true;
+  if (floorPlane) floorPlane.visible = true;
+
+  // Show 2D HTML labels
+  labelsContainer.style.display = 'block';
+
+  // Restore skeleton transform
+  if (mainScene.userData.originalMainGroupPos) {
+    skeletonGroup.position.copy(mainScene.userData.originalMainGroupPos);
+  }
+  if (mainScene.userData.originalMainGroupRot) {
+    skeletonGroup.rotation.copy(mainScene.userData.originalMainGroupRot);
+  }
+
+  // Restore camera target & controls
+  if (mainScene.userData.originalControlsTarget) {
+    mainControls.target.copy(mainScene.userData.originalControlsTarget);
+  }
+  
+  // Calculate standard camera position
+  const finalBox = new THREE.Box3().setFromObject(skeletonGroup);
+  const center = finalBox.getCenter(new THREE.Vector3());
+  const size = finalBox.getSize(new THREE.Vector3());
+  
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    mainControls.target.set(0, center.y + 0.3, 0);
+    mainCamera.position.set(0, center.y - 0.2, size.y * 2.4);
+  } else {
+    mainControls.target.copy(center);
+    mainCamera.position.set(0, center.y, size.y * 1.35);
+  }
+  mainControls.update();
+
+  console.log("Desktop VR Simulator Mode deactivated.");
 }
 
