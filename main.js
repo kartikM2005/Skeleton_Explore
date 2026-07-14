@@ -252,23 +252,23 @@ function setupMainScene() {
   controller1 = mainRenderer.xr.getController(0);
   controller1.addEventListener('squeezestart', () => onControllerSqueezeStart(controller1));
   controller1.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller1));
-  dolly.add(controller1);
+  cameraPitchGroup.add(controller1);
 
   controller2 = mainRenderer.xr.getController(1);
   controller2.addEventListener('squeezestart', () => onControllerSqueezeStart(controller2));
   controller2.addEventListener('squeezeend', () => onControllerSqueezeEnd(controller2));
-  dolly.add(controller2);
+  cameraPitchGroup.add(controller2);
 
   // Controller Grip models setup
   const controllerModelFactory = new XRControllerModelFactory();
 
   controllerGrip1 = mainRenderer.xr.getControllerGrip(0);
   controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-  dolly.add(controllerGrip1);
+  cameraPitchGroup.add(controllerGrip1);
 
   controllerGrip2 = mainRenderer.xr.getControllerGrip(1);
   controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-  dolly.add(controllerGrip2);
+  cameraPitchGroup.add(controllerGrip2);
 
   // Visual pointer rays for 6DoF aiming
   const laserGeom = new THREE.BufferGeometry().setFromPoints([
