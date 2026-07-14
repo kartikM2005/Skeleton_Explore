@@ -184,3 +184,25 @@ To test the VR mode on an actual headset:
    https://<your-computer-ip>:8081
    ```
 4. Accept the self-signed certificate warning as described in Step 4.
+
+---
+
+### 🖥️ Testing in a Desktop Browser (Without a VR Headset)
+
+If you do not have a physical VR headset, you can simulate and test AR/VR inputs directly in your desktop browser:
+1. Install the **WebXR API Emulator** extension for your browser:
+   * [Chrome Web Store](https://chromewebstore.google.com/detail/webxr-api-emulator/mjddjgeghidkamebkajehcekiejabkiq)
+   * [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/webxr-api-emulator/)
+2. Open the application in your browser (`https://localhost:8081`).
+3. Open your browser's Developer Tools (Press `F12` or `Ctrl+Shift+I`).
+4. Select the **WebXR** tab in the DevTools panel.
+5. Choose a simulated device (e.g., Meta Quest 2).
+6. Click the **VR Experience** button in the app. The emulator will simulate headset movements and controllers, allowing you to test interactions without physical hardware.
+
+---
+
+### 🌐 Production Deployment
+
+Since OsteoExplore is a pure static web application, it can be deployed to any static hosting provider. The only requirement is that the hosting provider **must support HTTPS** (as WebXR APIs are blocked on unsecured HTTP connections):
+*   **GitHub Pages**: Push the repository to GitHub, go to repository Settings -> Pages, and enable deployment from the `main` branch. GitHub Pages handles SSL/HTTPS automatically.
+*   **Vercel / Netlify**: Connect the repository to Vercel or Netlify. They will automatically detect the static project and serve it over a secure SSL certificate.
