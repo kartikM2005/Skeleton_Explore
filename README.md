@@ -47,14 +47,23 @@ Set inside a meticulously detailed virtual operating room, users can study a lif
 
 ---
 
-## 🛠️ Tech Stack & Libraries
+## 🛠️ Tech Stack, Libraries & Dependencies
 
-*   **Core**: HTML5, Vanilla CSS3 (Custom variables, glassmorphism, dynamic keyframe animations).
-*   **Scripting**: Javascript (ES6+ Import/Export Modules).
-*   **3D Engine**: [Three.js](https://threejs.org/) (v150).
-*   **Interactive Controls**: OrbitControls (Three.js addon).
-*   **Model Importer**: GLTFLoader (Three.js addon).
-*   **WebXR Utilities**: XRControllerModelFactory, WebXR Manager.
+### Core Technologies
+*   **HTML5 & CSS3**: Structured layout and premium styling utilizing custom CSS variables, glassmorphism UI principles, and responsive keyframe animations.
+*   **Vanilla JavaScript (ES6+)**: Core logic handled via standard JavaScript modules (Import/Export).
+
+### Runtime Dependencies (External CDNs)
+To maintain a fast, build-step-free static architecture, external libraries are loaded dynamically using import maps and CDNs:
+*   **[Three.js (v150)](https://threejs.org/)**: The core WebGL engine for 3D graphic rendering.
+*   **Three.js Addons**:
+    *   `OrbitControls`: Enables smooth orbital camera navigation (pan/zoom/rotate) on desktop and mobile.
+    *   `GLTFLoader`: Imports external GLTF/GLB models for the skeleton and environment.
+*   **[WebXR Polyfill](https://github.com/immersive-web/webxr-polyfill)**: Loaded from `jsDelivr` to guarantee fallback device-orientation controls and Cardboard support on devices without native WebXR.
+*   **[ES Module Shims](https://github.com/guybedford/es-module-shims)**: Polyfills import maps support for older web browsers.
+
+### Development Dependencies
+*   **Node.js http-server**: A simple command-line HTTP server wrapper used specifically to serve the project over HTTPS locally, satisfying WebXR security requirements.
 
 ---
 
@@ -117,29 +126,61 @@ Human_skeleton_Explore/
 
 ## 🚀 Local Development Setup
 
-To test WebXR features, browsers enforce a strict security policy requiring a secure connection (**HTTPS**) or `localhost`. 
+To run this project on your local machine, follow the steps below.
 
-This repository contains local SSL certificates (`cert.pem` and `key.pem`) to make HTTPS local serving easy.
+### 📋 Prerequisites
 
-### Running with a Local Server
+Before you start, make sure you have the following installed on your machine:
+1. **Git**: To clone the repository. [Download Git](https://git-scm.com/).
+2. **Node.js & npm** (v14 or higher recommended): To run the local development server. [Download Node.js](https://nodejs.org/).
 
-You can serve the project using node's `http-server` (or any equivalent development server). 
+---
 
-1.  Open your terminal in the repository root directory.
-2.  Start a secure local server using:
-    ```bash
-    npx http-server -S -C cert.pem -K key.pem -p 8081
-    ```
-    *   `-S` enables SSL (HTTPS).
-    *   `-C` and `-K` specify the local certificates.
-    *   `-p 8081` binds the server to port `8081`.
+### 💻 Step-by-Step Instructions
 
-3.  Open your browser and navigate to:
-    ```text
-    https://localhost:8081
-    ```
-    *(Note: Your browser may show a "Your connection is not private" warning because the SSL certificate is self-signed. Click "Advanced" and proceed to localhost to access the app.)*
+#### 1. Clone the Repository
+Clone the project repository using Git:
+```bash
+git clone <repository-url>
+```
+*(Replace `<repository-url>` with the actual repository URL)*
 
-4.  To test on a VR Headset (like Meta Quest):
-    *   Make sure your headset and computer are on the same Wi-Fi network.
-    *   Access the computer's local IP address (e.g., `https://192.168.x.x:8081`) from the headset browser, or set up port forwarding via Android Developer Options.
+#### 2. Navigate to the Project Directory
+Change directory to the cloned repository:
+```bash
+cd Human_skeleton_Explore
+```
+
+#### 3. Start the Secure Local Server
+To test WebXR features (AR & VR), browsers enforce a strict security policy requiring a secure connection (**HTTPS**) or `localhost`. This repository comes pre-packaged with local SSL certificates (`cert.pem` and `key.pem`) to make HTTPS setup automatic.
+
+Run the secure server in the repository root directory using `npx` (which downloads and runs `http-server` without needing a manual global package install):
+```bash
+npx http-server -S -C cert.pem -K key.pem -p 8081
+```
+*   `-S`: Enables SSL/TLS (HTTPS).
+*   `-C cert.pem` and `-K key.pem`: References the bundled local certificates.
+*   `-p 8081`: Binds the server to port `8081`.
+
+#### 4. Open in Your Browser
+Once the server starts up, open your web browser and navigate to:
+```text
+https://localhost:8081
+```
+
+> [!IMPORTANT]
+> **SSL Certificate Warning:** Since the bundled SSL certificates are self-signed for local development, your browser will display a warning like `"Your connection is not private"` or `"Potential Security Risk Ahead"`.
+> - **To proceed**: Click **Advanced** and then click **Proceed to localhost (unsafe)** or **Accept the Risk and Continue**.
+
+---
+
+### 🥽 Testing on a VR Headset (e.g., Meta Quest)
+
+To test the VR mode on an actual headset:
+1. Make sure your computer and VR headset are connected to the **same Wi-Fi network**.
+2. Note your computer's local IP address (e.g., `192.168.1.100`).
+3. Open the Meta Quest browser (or equivalent) and navigate to your computer's IP:
+   ```text
+   https://<your-computer-ip>:8081
+   ```
+4. Accept the self-signed certificate warning as described in Step 4.
